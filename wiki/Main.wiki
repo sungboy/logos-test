@@ -1,0 +1,13 @@
+말 그대로 메인 페이지
+
+= Introduction =
+
+자 이제 시작! 선수쳤다 :)
+
+
+= Details =
+
+Add your content here.  Format your content with:
+  * Text in *bold* or _italic_
+  * Headings, paragraphs, and lists
+  * Automatic links to other wiki pages
