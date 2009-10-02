@@ -28,5 +28,5 @@
   * Pintos의 Bitmap 코드는 lib/kernel/bitmap.c, lib/kernel/bitmap.h에 존재
   * 프로젝트 설명 문서의 3가지 방법 중 2번으로 구현됨(일부 어셈블리 명령과 Generic Bit Operation 혼합)
   * 프로젝트 설명 문서에는 set_bit(), clear_bit(), find_first_bit()의 기능을 하는 3가지 주요 함수가 구현되어야 한다고 되어 있고 Pintos 구현에서는 해당 기능을 수행하기 위해 각각 bitmap_mark, bitmap_reset, bitmap_scan 함수를 사용하면 됨
-== 전반적인 사용 흐름
+== 전반적인 사용 흐름 ==
 'void a();'
