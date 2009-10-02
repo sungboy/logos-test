@@ -1,4 +1,4 @@
-# summary 말 그대로 메인 페이지, 주의사항 요약
+#summary 말 그대로 메인 페이지, 주의사항 요약
 
 = Introduction =
 
