@@ -5,7 +5,7 @@
 <br>  1) timer.c, thread.c(특정함수에서 처리요?) 연관
 <br>  2) 기다리는 쓰레드 관리는 리스트로?
 == 나. 스케줄러 구현 ==
-<br>  1) 중요 키워드 : preemption, priority, 가변 Slice, 우선순위 역전은 고려할 필요 없음
+<br>  1) 중요 키워드 : preemption, priority, 가변 Slice, Active/expired priority array, 우선순위 역전은 고려할 필요 없음
 <br>  2) thrad 관련 함수 목록을 보면서 특정 함수가 변경에서 누락되지 않도록 유의
 <br>  3) 비트맵 구현
 <br>   가) 구글에서 fls 검색 조교님 권장, 프로젝트 설명 자료 참고에도 뭔가 주소 있음
