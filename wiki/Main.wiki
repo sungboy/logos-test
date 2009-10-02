@@ -14,7 +14,7 @@
 <br> 사. 함수 이름 등의 Name Convention 준수(소문자 기본, _로 단어 구분. 예 : thread_create)
 <br> 아. SVN Update를 자주 수행하여 빠른 충돌의 감지 요구
 
-= Details =
+= Wiki Details =
 
 Add your content here.  Format your content with:
   * Text in *bold* or _italic_
