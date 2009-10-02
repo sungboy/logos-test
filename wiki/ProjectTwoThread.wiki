@@ -1,0 +1,12 @@
+#summary One-sentence summary of this page.
+
+= 할일과 설명 =
+<br> 가. timer_sleep을 타이머 인터럽트를 사용하도록 변경
+<br>  1) timer.c, thread.c(wait 하는 스레드를 리스트로 저장했다가 ) 연관
+
+= Wiki Details =
+
+Add your content here.  Format your content with:
+  * Text in *bold* or _italic_
+  * Headings, paragraphs, and lists
+  * Automatic links to other wiki pages
