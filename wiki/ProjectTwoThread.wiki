@@ -1,4 +1,4 @@
-#summary One-sentence summary of this page.
+#summary 프로젝트 2 관련
 
 = 할일과 설명 =
 <br> 가. timer_sleep을 타이머 인터럽트를 사용하도록 변경
