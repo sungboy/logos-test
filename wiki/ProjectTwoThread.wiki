@@ -31,7 +31,7 @@
 == 전반적인 사용 흐름 ==
 {{{
 //생성
-struct bitmap'*' bm = bitmap_create( (할당할 비트 수) ); // 할당 후 모든 비트는 0으로 초기화
+struct bitmap* bm = bitmap_create( (할당할 비트 수) ); // 할당 후 모든 비트는 0으로 초기화
 }}}
 {{{
 //값 변경
