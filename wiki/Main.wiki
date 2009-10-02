@@ -11,5 +11,5 @@
 <br> 라. 상수는 #define을 이용할 것
 <br> 마. 적절한 assert를 사용할 것
 <br> 바. 추가 함수 주석 설명 반드시 포함(설명에 LOGOS-ADDED FUNCTION 삽입)
-<br> 사. 함수 이름 등의 Name Convention 준수(소문자 기본, _로 단어 구분. 예 : thread_create)
+<br> 사. 함수 이름 등의 Name Convention 준수(소문자 기본, '_'로 단어 구분. 예 : thread_create)
 <br> 아. SVN Update를 자주 수행하여 빠른 충돌의 감지 요구
