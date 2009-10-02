@@ -2,7 +2,7 @@
 
 = 할일과 설명 =
 <br> 가. timer_sleep을 타이머 인터럽트를 사용하도록 변경
-<br>&nbsp;  1) timer.c, thread.c(특정함수에서 처리요?) 연관
+<br>  1) timer.c, thread.c(특정함수에서 처리요?) 연관
 <br>  2) 기다리는 쓰레드 관리는 리스트로?
 <br> 나. 스케줄러 구현
 <br>  1) 중요 키워드 : preemption, priority, 가변 Slice, 우선순위 역전은 고려할 필요 없음
