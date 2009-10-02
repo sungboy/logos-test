@@ -29,7 +29,8 @@
   * 프로젝트 설명 문서의 3가지 방법 중 2번으로 구현됨(일부 어셈블리 명령과 Generic Bit Operation 혼합)
   * 프로젝트 설명 문서에는 set_bit(), clear_bit(), find_first_bit()의 기능을 하는 3가지 주요 함수가 구현되어야 한다고 되어 있고 Pintos 구현에서는 해당 기능을 수행하기 위해 각각 bitmap_mark, bitmap_reset, bitmap_scan 함수를 사용하면 됨
 == 전반적인 사용 흐름 ==
-{{{//생성
+{{{
+//생성
 <br>struct bitmap'*' bm = bitmap_create( (할당할 비트 수) ); // 할당 후 모든 비트는 0으로 초기화
 <br>
 <br>//값 변경
