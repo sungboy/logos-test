@@ -3,6 +3,7 @@
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "threads/interrupt.h"
 #include "threads/io.h"
 #include "threads/synch.h"
@@ -24,6 +25,19 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+/* LOGOS-ADDED VARIABLE
+   List of threads suspended due to timer_sleep. */
+static struct list timer_sleep_waiters;
+
+/* LOGOS-ADDED TYPE
+   List Element for timer_sleep_waiters. */
+struct timer_sleep_waiter
+  {
+    struct list_elem elem;
+    int64_t expires;
+	struct thread *waiter;
+  };
+
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
@@ -44,6 +58,9 @@ timer_init (void)
   outb (0x40, count >> 8);
 
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+  /* Initialize timer_sleep_waiters, the list for timer_sleep. */
+  list_init(&timer_sleep_waiters);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -92,15 +109,51 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+/* LOGOS-ADDED FUNCTION
+   less function for timer_sleep_waiter. */
+bool
+timer_sleep_waiter_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+	struct timer_sleep_waiter *wa = list_entry (a, struct timer_sleep_waiter, elem);
+	struct timer_sleep_waiter *wb = list_entry (b, struct timer_sleep_waiter, elem);
+
+	return wa->expires < wb->expires;
+}
+
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
+  int64_t due = start + ticks;
+  enum intr_level old_level;
+  struct timer_sleep_waiter *w;
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+
+  /* timer_sleep can be implemented as follws, but we implement it using the timer interrupt. */
+  /* while (timer_elapsed (start) < ticks) 
+    thread_yield ();*/
+
+  /* Check the timeout has already expired. */
+  if (ticks <= 0)
+    return;
+
+  /* Allocate and set the internal data structure properly. */
+  w = (struct timer_sleep_waiter*) malloc (sizeof *w);
+  if (w == NULL)
+    PANIC ("couldn't allocate the internal data structure for timer_sleep");
+  w->expires = due;
+  w->waiter = thread_current ();
+
+  /* Make the current thread sleep. */
+  old_level = intr_disable ();
+  list_insert_ordered (&timer_sleep_waiters, &w->elem, timer_sleep_waiter_less, NULL);
+  thread_block ();
+  intr_set_level (old_level);
+
+  /* Release the internal data structure. */
+  free (w);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -135,7 +188,31 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
+  int64_t current_time;
+  struct list_elem *e, *next;
+
+  ASSERT (intr_context ());
+  ASSERT (intr_get_level () == INTR_OFF);
+
+  /* Update Tick Information. */
   ticks++;
+
+  /* Wake up threads whose timeout expired. */
+  current_time = timer_ticks ();
+
+  for (e = list_begin (&timer_sleep_waiters); e != list_end (&timer_sleep_waiters);
+       e = next)
+    {
+      struct timer_sleep_waiter *w = list_entry (e, struct timer_sleep_waiter, elem);
+      next = list_next (e);
+      if (w->expires <= current_time)
+        {
+          list_remove (e);
+          thread_unblock (w->waiter);
+        }
+    }
+
+  /* Call thread_tick. */
   thread_tick ();
 }
 
