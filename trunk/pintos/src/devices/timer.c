@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "threads/interrupt.h"
+#include "threads/malloc.h"
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
@@ -38,6 +39,7 @@ struct timer_sleep_waiter
 	struct thread *waiter;
   };
 
+bool timer_sleep_waiter_less (const struct list_elem *a, const struct list_elem *b, void *aux);
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
