@@ -29,7 +29,7 @@
   * 프로젝트 설명 문서의 3가지 방법 중 2번으로 구현됨(일부 어셈블리 명령과 Generic Bit Operation 혼합)
   * 프로젝트 설명 문서에는 set_bit(), clear_bit(), find_first_bit()의 기능을 하는 3가지 주요 함수가 구현되어야 한다고 되어 있고 Pintos 구현에서는 해당 기능을 수행하기 위해 각각 bitmap_mark, bitmap_reset, bitmap_scan 함수를 사용하면 됨
 == 전반적인 사용 흐름 ==
-  * 주의 - 비트맵 관련 함수들 중 일부는 원자적(automic)이지 않다. 따라서 Interrupt Disable이 되지 않고 수행되는 코드 부분에서 여러 개의 스레드 또는 프로세스가 동시에 엑세스할 가능성이 있는 경우에는 Multi-thread Safe함을 동기화를 통해 보장하기 위해 Semaphore, Lock, Interrupt Disable 등 중 하나가 반드시 사용되어야 한다. 
+  * 주의 - 비트맵 관련 함수들 중 일부는 원자적(atomic)이지 않다. 따라서 Interrupt Disable이 되지 않고 수행되는 코드 부분에서 여러 개의 스레드 또는 프로세스가 동시에 엑세스할 가능성이 있는 경우에는 Multi-thread Safe함을 동기화를 통해 보장하기 위해 Semaphore, Lock, Interrupt Disable 등 중 하나가 반드시 사용되어야 한다. 
   * 주의 - 아래 설명에 오타 등이 있을 수 있으니 코드가 원하는 대로 수행되지 않는 경우는 즉시 논의할 것
 {{{
 //생성
