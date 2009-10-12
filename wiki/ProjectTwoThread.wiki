@@ -80,4 +80,5 @@ bitmap_destroy(bm);
 <br>   - 534 줄 -> idx == ~가 더 낫지... 않...? idx == BITMAP_ERROR이면 expired와 교체 후에 스케줄해야 할 듯? 
 <br>   - 591~610 줄 -> 삭제?
 == preemption 추가 작성 요구 ==
-   - thread_create, thread_unblock, thread_set_priority
+- thread_create, thread_unblock, thread_set_priority
+<br>   - 위의 3가지 함수를 사용하는 곳을 검색해서 코드 확인
