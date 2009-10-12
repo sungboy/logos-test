@@ -69,6 +69,8 @@ struct runqueue run_queue;
 
 // LOGOS-EDITED we don't need it more.
 //#define TIME_SLICE 4            /* # of timer ticks to give each thread. */
+
+#define TIME_SLICE_MIN 5  /* LOGOS-ADDED */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 /* If false (default), use round-robin scheduler.
@@ -168,7 +170,7 @@ thread_tick (void)
     kernel_ticks++;
 
   /* Enforce preemption. */
-  if (++thread_ticks >= (unsigned)(t->priority + 5))	// LOGOS-EDITED: time slice = priority + 5 (tick)
+  if (++thread_ticks >= (unsigned)(t->priority + TIME_SLICE_MIN))	// LOGOS-EDITED: time slice = priority + TIME_SLICE_MIN(5 tick)
     intr_yield_on_return ();
 }
 
@@ -232,6 +234,12 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+
+  /* LOGOS-ADDED : 새 쓰레드가 현재 쓰레드보다 우선 순위가 높다면 선점 */
+  if (thread_current ()->priority < t->priority)
+    {
+      thread_yield();
+    }
 
   return tid;
 }
@@ -344,8 +352,16 @@ thread_yield (void)
   if (cur != idle_thread)
 	{
 		// LOGOS-EDITED 
-		list_push_back (&(run_queue.expired->queue[PRI_MAX - cur->priority]), &cur->elem);
-    bitmap_mark (run_queue.expired->bm, PRI_MAX - cur->priority);
+    if ( thread_ticks >= (unsigned)(cur->priority + TIME_SLICE_MIN))
+      {
+	      list_push_back (&(run_queue.expired->queue[PRI_MAX - cur->priority]), &cur->elem);
+        bitmap_mark (run_queue.expired->bm, PRI_MAX - cur->priority);
+      }
+    else
+      {
+	      list_push_back (&(run_queue.active->queue[PRI_MAX - cur->priority]), &cur->elem);
+        bitmap_mark (run_queue.active->bm, PRI_MAX - cur->priority);
+      }
 	}
   cur->status = THREAD_READY;
   schedule ();
