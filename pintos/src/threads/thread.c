@@ -50,14 +50,13 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 
 /* LOGOS-ADD-START */
+unsigned long bitmap_buf1[PRI_MAX-PRI_MIN+1];
+unsigned long bitmap_buf2[PRI_MAX-PRI_MIN+1];
+
 struct prio_array
   {
-    int nr_active;	// number of tasks
-    unsigned long bit_array[PRI_MAX+1];
-
     struct bitmap *bm;
-
-    struct list queue[PRI_MAX+1];	// 0~63 : total 64
+    struct list queue[PRI_MAX-PRI_MIN+1];	// 0~63 : total 64
   };
 
 struct runqueue
@@ -110,22 +109,17 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  //list_init (&ready_list);	// LOGOS-DELETED
 	
 	// LOGOS-ADDED
 	list_init (run_queue.arrays[0].queue);
 	list_init (run_queue.arrays[1].queue);
 
   int i = 0;
-	for (i = 0; PRI_MAX >= i; i++)
+	for (i = PRI_MIN; PRI_MAX >= i; i++)
   {
     list_init (&run_queue.arrays[0].queue[i]);
     list_init (&run_queue.arrays[1].queue[i]);
-
-    run_queue.arrays[0].bit_array[i] = 0;
-    run_queue.arrays[1].bit_array[i] = 0;
   };
-	// LOGOS-DELETED
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -134,8 +128,8 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 
 	// LOGOS-ADDED
-	//run_queue.arrays[0].bm = bitmap_create (PRI_MAX+1);
-	//run_queue.arrays[1].bm = bitmap_create (PRI_MAX+1);
+	run_queue.arrays[0].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, bitmap_buf1, (PRI_MAX-PRI_MIN+1)*sizeof (unsigned long));
+	run_queue.arrays[1].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, bitmap_buf2, (PRI_MAX-PRI_MIN+1)*sizeof (unsigned long));
 
 	run_queue.active = &run_queue.arrays[0];
 	run_queue.expired = &run_queue.arrays[1];
@@ -256,8 +250,7 @@ thread_block (void)
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
 
-  struct thread *cur = thread_current ();
-  cur->status = THREAD_BLOCKED;
+  thread_current ()->status = THREAD_BLOCKED;
 
   schedule ();
 }
@@ -276,18 +269,10 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
 
 	// LOGOS-EDIT-START
-  //list_push_back (&ready_list, &t->elem);
 
 	ASSERT (0 < t->priority || PRI_MAX > t->priority);
-
 	list_push_back (&run_queue.active->queue[PRI_MAX - t->priority], &t->elem);
-
-  if (!run_queue.active->bm)	// if bitmap is not inited
-    run_queue.active->bm = bitmap_create (PRI_MAX + 1);
-	
   bitmap_mark (run_queue.active->bm, PRI_MAX - t->priority);
-  
-	//run_queue.active->bit_array[/*t->priority*/0] = 1;	// test
 
 	// LOGOS-EDIT-END
 
@@ -361,10 +346,7 @@ thread_yield (void)
   if (cur != idle_thread)
 	{
 		// LOGOS-EDITED 
-    //list_push_back (&ready_list, &cur->elem);
 		list_push_back (&(run_queue.expired->queue[PRI_MAX - cur->priority]), &cur->elem);
-    if (!run_queue.expired->bm)
-      run_queue.expired->bm = bitmap_create( PRI_MAX + 1 );
     bitmap_mark (run_queue.expired->bm, PRI_MAX - cur->priority);
 	}
   cur->status = THREAD_READY;
@@ -526,22 +508,31 @@ static struct thread *
 next_thread_to_run (void) 
 {
   // LOGOS-EDITED
-
-  //if (list_empty (&ready_list))
 	ASSERT (run_queue.active->bm);
 
   unsigned idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
 	if (BITMAP_ERROR == idx)
-    return idle_thread;
-  else
-	{
-    //return list_entry (list_pop_front (&ready_list), struct thread, elem);
-		struct list_elem* task = list_entry (list_pop_front (&run_queue.active->queue[idx]), struct thread, elem);
-    if (list_empty (&run_queue.active->queue[idx]))
-      bitmap_reset (run_queue.active->bm, idx);
+    {
+      idx = bitmap_scan (run_queue.expired->bm, 0, 1, true);  // active queue가 비었으므로 expired queue에 task가 있나 확인
+      if (BITMAP_ERROR == idx)
+        {
+          // no task
+          return idle_thread;
+        }
+      else
+        {
+          // all tasks are expired
+          struct prio_array *swap = run_queue.active;
+          run_queue.active = run_queue.expired;
+          run_queue.expired = swap;
+        }
+    }
 
-    return task;
-	}
+  struct thread* task = list_entry (list_pop_front (&run_queue.active->queue[idx]), struct thread, elem);
+  if (list_empty (&run_queue.active->queue[idx]))
+    bitmap_reset (run_queue.active->bm, idx);
+
+  return task;
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -588,26 +579,6 @@ schedule_tail (struct thread *prev)
       ASSERT (prev != cur);
       palloc_free_page (prev);
     }
-  // LOGOS-ADDED-START
-  //else
-  //  {
-  //    list_push_back (&run_queue.expired->queue[PRI_MAX - prev->priority], &prev->elem);
-
-  //    if (!run_queue.expired->bm)
-  //      run_queue.expired->bm = bitmap_create (PRI_MAX + 1);
-
-  //    bitmap_mark (run_queue.expired->bm, PRI_MAX - prev->priority);
-  //  }
-
-  int idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
-  if (BITMAP_ERROR == idx)  // no active task = all tasks is expired
-    {
-      struct prio_array *swap = run_queue.active;
-      run_queue.active = run_queue.expired;
-      run_queue.expired = swap;
-    }
-  // LOGOS-ADDED-END
-
 }
 
 /* Schedules a new process.  At entry, interrupts must be off and
