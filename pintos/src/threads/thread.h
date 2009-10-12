@@ -88,6 +88,7 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int remained_ticks;                  /* LOGOS-ADDED : 스레드가 선점 당하면서 실행되지 못 한 남은 시간 */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
