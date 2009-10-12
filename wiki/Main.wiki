@@ -10,6 +10,17 @@
 <br>다. 디자인, 동료검토, 테스트
 <br>라. 상수는 #define을 이용할 것
 <br>마. 적절한 assert를 사용할 것
-<br>바. 추가 함수, 변수 등에 주석 설명 반드시 포함(설명에 LOGOS-ADDED FUNCTION, LOGOS-ADDED VARIABLE 등 삽입), 수정 시 코드는 물론 주석도 수정
+<br>바. 추가 함수, 추가 변수 등에 주석 설명 반드시 포함(설명에 LOGOS-ADDED FUNCTION, LOGOS-ADDED VARIABLE 등 LOGOS 포함 주석 삽입), 수정 시 코드는 물론 주석도 수정
 <br>사. 함수 이름 등의 Name Convention 준수(소문자 기본, underline로 단어 구분. 예 : thread_create)
-<br> 아. SVN Update를 자주 수행하여 빠른 충돌의 감지 요구
+<br>아. SVN Update를 자주 수행하여 빠른 충돌의 감지 요구
+
+= 체크리스트 =
+가. 모든 데이터의 빠짐 없는 수정
+<br>나. 각 데이터의 초기화
+<br>다. 인터럽트 상태 확인 및 인터럽트 관련 ASSERT 삽입
+<br>라. 락 사용
+<br>마. sort 등이 stable할 필요 있는가? 한가? 
+<br>바. Naming이 틀린 것은 없는가? 
+<br>사. 인터럽트 상태에서 동적 메모리 할당, 해제 조심
+<br>아. 주석을 적절히 달았는가? 
+<br>자. idle thread 관련 처리가 되었는가? 
