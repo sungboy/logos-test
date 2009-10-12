@@ -64,7 +64,7 @@ bitmap_destroy(bm);
   * 주석 스타일이 좀 다른 듯? 
   * alarm-multiple은 내가 작성한 것 반영해서? 
   * 수정 함수 주석도 맞는지 확인해야 할 듯? 
-<br> - 작성 코드
+== 작성 코드 ==
 <br>   - 55 줄 -> 삭제?
 <br>   - 56 줄 -> 삭제?
 <br>   - 58 줄 -> 고정 버퍼로...
@@ -79,5 +79,5 @@ bitmap_destroy(bm);
 <br>   - 366~367 줄 -> 삭제?
 <br>   - 534 줄 -> idx == ~가 더 낫지... 않...? idx == BITMAP_ERROR이면 expired와 교체 후에 스케줄해야 할 듯? 
 <br>   - 591~610 줄 -> 삭제?
-<br> - preemption 추가 작성 요구
+== preemption 추가 작성 요구 ==
 <br>   - thread_create, thread_unblock, thread_set_priority
