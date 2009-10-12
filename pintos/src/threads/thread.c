@@ -50,11 +50,9 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 
 /* LOGOS-ADD-START */
-unsigned long bitmap_buf1[PRI_MAX-PRI_MIN+1];
-unsigned long bitmap_buf2[PRI_MAX-PRI_MIN+1];
-
 struct prio_array
   {
+    char bitmap_buf[PRI_MAX-PRI_MIN+1];
     struct bitmap *bm;
     struct list queue[PRI_MAX-PRI_MIN+1];	// 0~63 : total 64
   };
@@ -115,7 +113,7 @@ thread_init (void)
 	list_init (run_queue.arrays[1].queue);
 
   int i = 0;
-	for (i = PRI_MIN; PRI_MAX >= i; i++)
+	for (; PRI_MAX - PRI_MIN + 1 >= i; i++)
   {
     list_init (&run_queue.arrays[0].queue[i]);
     list_init (&run_queue.arrays[1].queue[i]);
@@ -128,8 +126,8 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 
 	// LOGOS-ADDED
-	run_queue.arrays[0].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, bitmap_buf1, (PRI_MAX-PRI_MIN+1)*sizeof (unsigned long));
-	run_queue.arrays[1].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, bitmap_buf2, (PRI_MAX-PRI_MIN+1)*sizeof (unsigned long));
+	run_queue.arrays[0].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, run_queue.arrays[0].bitmap_buf, bitmap_buf_size (PRI_MAX-PRI_MIN+1));
+	run_queue.arrays[1].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, run_queue.arrays[1].bitmap_buf, bitmap_buf_size (PRI_MAX-PRI_MIN+1));
 
 	run_queue.active = &run_queue.arrays[0];
 	run_queue.expired = &run_queue.arrays[1];
