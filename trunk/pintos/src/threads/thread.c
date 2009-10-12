@@ -52,7 +52,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* LOGOS-ADD-START */
 struct prio_array
   {
-    char bitmap_buf[PRI_MAX-PRI_MIN+1];
+    char bitmap_buf[16];  // bitmap_buf_size 함수를 이용하여 알아낸 수치
     struct bitmap *bm;
     struct list queue[PRI_MAX-PRI_MIN+1];	// 0~63 : total 64
   };
@@ -170,7 +170,20 @@ thread_tick (void)
     kernel_ticks++;
 
   /* Enforce preemption. */
-  if (++thread_ticks >= (unsigned)(t->priority + TIME_SLICE_MIN))	// LOGOS-EDITED: time slice = priority + TIME_SLICE_MIN(5 tick)
+
+  unsigned ticks = t->priority + TIME_SLICE_MIN;  // time slice = priority + TIME_SLICE_MIN(5 tick)
+
+  /* LOGOS-ADDED : 중간에 선점된 스레드 처리 */
+  if (t->remained_ticks && thread_ticks+1 >= ticks)
+    {
+      t->remained_ticks = 0;
+      thread_ticks++;
+      intr_yield_on_return ();
+      return;
+    }
+
+  // LOGOS-EDITED: 
+  if (++thread_ticks >= ticks)	
     intr_yield_on_return ();
 }
 
@@ -217,6 +230,7 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  t->remained_ticks = 0;
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -361,6 +375,7 @@ thread_yield (void)
       {
 	      list_push_back (&(run_queue.active->queue[PRI_MAX - cur->priority]), &cur->elem);
         bitmap_mark (run_queue.active->bm, PRI_MAX - cur->priority);
+        cur->remained_ticks = cur->priority + TIME_SLICE_MIN - thread_ticks;  // save ticks remained
       }
 	}
   cur->status = THREAD_READY;
@@ -372,6 +387,15 @@ thread_yield (void)
 void
 thread_set_priority (int new_priority) 
 {
+  if (thread_current ()->priority > new_priority)
+    {
+      unsigned idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
+      if ( PRI_MAX - PRI_MIN - idx > (unsigned)new_priority ) // 새 우선순위보다 높은 우선순위의 대기 중 작업이 있음
+        {
+          thread_yield();
+        }
+    }
+
   thread_current ()->priority = new_priority;
 }
 
