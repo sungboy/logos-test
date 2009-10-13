@@ -280,10 +280,15 @@ thread_create (const char *name, int priority,
 void
 thread_block (void) 
 {
+  struct thread* cur = thread_current ();
+
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
 
-  thread_current ()->status = THREAD_BLOCKED;
+  if(!cur->remained_ticks)
+		  cur->remained_ticks = thread_get_time_slice();
+  cur->remained_ticks = cur->remained_ticks - thread_ticks;  // save ticks remained
+  cur->status = THREAD_BLOCKED;
 
   schedule ();
 }
