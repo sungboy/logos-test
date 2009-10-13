@@ -52,7 +52,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* LOGOS-ADD-START */
 struct prio_array
   {
-    char bitmap_buf[16];  // bitmap_buf_size 함수를 이용하여 알아낸 수치
+    char bitmap_buf[16];  // bitmap_buf_size ?�수�??�용?�여 ?�아???�치
     struct bitmap *bm;
     struct list queue[PRI_MAX-PRI_MIN+1];	// 0~63 : total 64
   };
@@ -65,6 +65,8 @@ struct runqueue
   };
 
 struct runqueue run_queue;
+
+static bool is_scheduling_started;
 /* LOGOS-ADD-END */
 
 // LOGOS-EDITED we don't need it more.
@@ -133,6 +135,8 @@ thread_init (void)
 
 	run_queue.active = &run_queue.arrays[0];
 	run_queue.expired = &run_queue.arrays[1];
+
+	is_scheduling_started = false;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -146,6 +150,7 @@ thread_start (void)
   thread_create ("idle", PRI_MIN, idle, &idle_started);
 
   /* Start preemptive thread scheduling. */
+  is_scheduling_started = true;
   intr_enable ();
 
   /* Wait for the idle thread to initialize idle_thread. */
@@ -174,7 +179,7 @@ thread_tick (void)
   unsigned ticks = t->priority + TIME_SLICE_MIN;  // time slice = priority + TIME_SLICE_MIN(5 tick)
   ++thread_ticks;
 
-  /* LOGOS-EDITED : 중간에 선점된 스레드 처리 */
+  /* LOGOS-EDITED : 중간???�점???�레??처리 */
   if (t->remained_ticks && thread_ticks >= t->remained_ticks)
     {
       t->remained_ticks = 0;
@@ -292,12 +297,10 @@ thread_unblock (struct thread *t)
   t->status = THREAD_READY;
   intr_set_level (old_level);
 
-  /* LOGOS-ADDED : 새 쓰레드가 현재 쓰레드보다 우선 순위가 높다면 선점 */
+  /* LOGOS-ADDED : ???�레?��? ?�재 ?�레?�보???�선 ?�위가 ?�다�??�점 */
   struct thread *cur = thread_current ();
-  if (cur && cur != idle_thread && cur->priority < t->priority)
-    {
+  if (cur->priority < t->priority)
       thread_yield();
-    }
 }
 
 /* Returns the name of the running thread. */
@@ -362,6 +365,9 @@ thread_yield (void)
   
   ASSERT (!intr_context ());
 
+  if(!is_scheduling_started)
+	  return;
+
   old_level = intr_disable ();
   if (cur != idle_thread)
 	{
@@ -390,7 +396,7 @@ thread_set_priority (int new_priority)
   if (thread_current ()->priority > new_priority)
     {
       unsigned idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
-      if (BITMAP_ERROR != idx && PRI_MAX - idx > (unsigned)new_priority) // 새 우선순위보다 높은 우선순위의 대기 중 작업이 있음
+      if (BITMAP_ERROR != idx && PRI_MAX - idx > (unsigned)new_priority) // ???�선?�위보다 ?��? ?�선?�위???��?�??�업???�음
         {
           thread_yield();
         }
@@ -551,7 +557,7 @@ next_thread_to_run (void)
   unsigned idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
 	if (BITMAP_ERROR == idx)
     {
-      idx = bitmap_scan (run_queue.expired->bm, 0, 1, true);  // active queue가 비었으므로 expired queue에 task가 있나 확인
+      idx = bitmap_scan (run_queue.expired->bm, 0, 1, true);  // active queue가 비었?��?�?expired queue??task가 ?�나 ?�인
       if (BITMAP_ERROR == idx)
         {
           // no task
