@@ -172,18 +172,17 @@ thread_tick (void)
   /* Enforce preemption. */
 
   unsigned ticks = t->priority + TIME_SLICE_MIN;  // time slice = priority + TIME_SLICE_MIN(5 tick)
+  ++thread_ticks;
 
-  /* LOGOS-ADDED : 중간에 선점된 스레드 처리 */
-  if (t->remained_ticks && thread_ticks+1 >= ticks)
+  /* LOGOS-EDITED : 중간에 선점된 스레드 처리 */
+  if (t->remained_ticks && thread_ticks >= t->remained_ticks)
     {
       t->remained_ticks = 0;
-      thread_ticks++;
       intr_yield_on_return ();
       return;
     }
-
-  // LOGOS-EDITED: 
-  if (++thread_ticks >= ticks)	
+ 
+  if (thread_ticks >= ticks)	
     intr_yield_on_return ();
 }
 
@@ -249,12 +248,6 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  /* LOGOS-ADDED : 새 쓰레드가 현재 쓰레드보다 우선 순위가 높다면 선점 */
-  if (thread_current ()->priority < t->priority)
-    {
-      thread_yield();
-    }
-
   return tid;
 }
 
@@ -288,16 +281,23 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
 
-	// LOGOS-EDIT-START
-
-	ASSERT (0 < t->priority || PRI_MAX > t->priority);
-	list_push_back (&run_queue.active->queue[PRI_MAX - t->priority], &t->elem);
+  // LOGOS-EDIT-START
+  ASSERT (0 < t->priority || PRI_MAX > t->priority);
+  list_push_back (&run_queue.active->queue[PRI_MAX - t->priority], &t->elem);
   bitmap_mark (run_queue.active->bm, PRI_MAX - t->priority);
+
 
 	// LOGOS-EDIT-END
 
   t->status = THREAD_READY;
   intr_set_level (old_level);
+
+  /* LOGOS-ADDED : 새 쓰레드가 현재 쓰레드보다 우선 순위가 높다면 선점 */
+  struct thread *cur = thread_current ();
+  if (cur && cur != idle_thread && cur->priority < t->priority)
+    {
+      thread_yield();
+    }
 }
 
 /* Returns the name of the running thread. */
@@ -366,7 +366,7 @@ thread_yield (void)
   if (cur != idle_thread)
 	{
 		// LOGOS-EDITED 
-    if ( thread_ticks >= (unsigned)(cur->priority + TIME_SLICE_MIN))
+    if (thread_ticks >= (unsigned)(cur->priority + TIME_SLICE_MIN))
       {
 	      list_push_back (&(run_queue.expired->queue[PRI_MAX - cur->priority]), &cur->elem);
         bitmap_mark (run_queue.expired->bm, PRI_MAX - cur->priority);
