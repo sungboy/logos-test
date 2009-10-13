@@ -275,9 +275,34 @@ thread_block (void)
 
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
-   make the running thread ready.) */
+   make the running thread ready.)
+   + Reschedule if neccessary. */
 void
 thread_unblock (struct thread *t) 
+{
+  /* LOGOS-ADDED */
+  ASSERT(!is_scheduling_started || intr_context () || intr_get_level () == INTR_ON);
+
+  thread_unblock_without_preemption (t);
+  /* LOGOS-ADDED */
+  if(!is_scheduling_started)
+	  return;
+
+  if (thread_get_priority() < t->priority)
+  {
+	  if(intr_context ())
+		intr_yield_on_return();
+	  else
+		thread_yield();
+  }
+}
+
+/* LOGOS-ADDED
+   Transitions a blocked thread T to the ready-to-run state.
+   This is an error if T is not blocked.  (Use thread_yield() to
+   make the running thread ready.) */
+void
+thread_unblock_without_preemption (struct thread *t) 
 {
   enum intr_level old_level;
 
@@ -296,11 +321,6 @@ thread_unblock (struct thread *t)
 
   t->status = THREAD_READY;
   intr_set_level (old_level);
-
-  /* LOGOS-ADDED : ???°ë ˆ?œê? ?„ìž¬ ?°ë ˆ?œë³´???°ì„  ?œìœ„ê°€ ?’ë‹¤ë©?? ì  */
-  struct thread *cur = thread_current ();
-  if (cur->priority < t->priority)
-      thread_yield();
 }
 
 /* Returns the name of the running thread. */

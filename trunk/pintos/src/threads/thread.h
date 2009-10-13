@@ -88,7 +88,7 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int remained_ticks;                  /* LOGOS-ADDED : 스레드가 선점 당하면서 실행되지 못 한 남은 시간 */
+    int remained_ticks;                  /* LOGOS-ADDED : ?�레?��? ?�점 ?�하면서 ?�행?��? �????��? ?�간 */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -118,6 +118,7 @@ tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
+void thread_unblock_without_preemption (struct thread *);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
