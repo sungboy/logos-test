@@ -82,3 +82,16 @@ bitmap_destroy(bm);
 == preemption 추가 작성 요구 ==
 - thread_create, thread_unblock, thread_set_priority
 <br>   - 위의 3가지 함수를 사용하는 곳을 검색해서 코드 확인
+
+177 줄 - if (~ && thread_ticks >= t->remained_ticks) 일 듯? 
+177~187 줄 - thread_ticks를 그냥 맨 앞에서 한번 thread_ticks++; 한 후에 뒤에서는 이미 ++되어 있다고 생각하는 것이 더 편할 듯? 그래야 괜히 +1, 중간 ++ 안 해도 될 듯... 
+
+= 박동민 조항준 코드 2차 동료검토(2009/10/13) =
+== 작성 코드 검토(thread.c) ==
+thread_unblock - thread_unblock 선점 처리 구현 안 됨
+<br>
+<br>thread_yield - thread_ticks가 remained_ticks를 넘어서서 yield가 불린 경우에 처리 문제. expired로 들어가야 하는데 active로 들어감. 수정에 노력이 좀 필요할 수도? 현재 thread_tick 함수 구현에서 이미 remained_ticks를 0으로 만들었으므로 여기서 그냥 thread_tick 함수에서 하듯이 thread_ticks가 remained_ticks(이 경우 항상 0)을 넘었으면 expired로 가게 처리하면 안 됨. remained_ticks을 thread_tick에서 0으로 안 만들게 하고 적당히 처리할 수도 있지만 저번에 논의된 대로 지나치게 thread_tick 함수와 thread_yield가 중복되는 문제가 있음
+<br>1. 저번에 말한대로 별도 bool 변수로 expired로 가야함을 알려주도록 하거나 
+<br>2. 최소한 공통 부분을 함수로 분리해야 함. is_thread_expired 등의 이름으로 새 함수를 만들고 거기서 remained_ticks가 0이 아니면 remained_ticks보다 thread_ticks가 큰지 체크, remained_ticks가 0이면 일반적인 Time Slice로 체크한 후에 expired로 가야하면 return true, active로 가야하면 return false 등을 하게 하고 thread_yield와 thread_tick 함수에서 해당 is_thread_expired를 사용하여 expired여부를 체크하게 하면 됨
+
+<br>thread_set_priority - 우선 순위 비교 시 식이 PRI_MAX - idx > (unsigned)new_priority 일 듯? bitmap에서 찾지 못한 경우 처리도 해야 할 듯? 
