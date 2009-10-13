@@ -390,7 +390,7 @@ thread_set_priority (int new_priority)
   if (thread_current ()->priority > new_priority)
     {
       unsigned idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
-      if ( PRI_MAX - PRI_MIN - idx > (unsigned)new_priority ) // 새 우선순위보다 높은 우선순위의 대기 중 작업이 있음
+      if (BITMAP_ERROR != idx && PRI_MAX - idx > (unsigned)new_priority) // 새 우선순위보다 높은 우선순위의 대기 중 작업이 있음
         {
           thread_yield();
         }
