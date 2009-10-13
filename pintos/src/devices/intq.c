@@ -110,7 +110,7 @@ signal (struct intq *q UNUSED, struct thread **waiter)
 
   if (*waiter != NULL) 
     {
-      thread_unblock (*waiter);
+      thread_unblock (*waiter); // dmpark : TODO : INTR_OFF state can be a problem. must be changed to thread_unblock_without_preemption?
       *waiter = NULL;
     }
 }
