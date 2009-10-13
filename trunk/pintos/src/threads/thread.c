@@ -52,7 +52,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* LOGOS-ADD-START */
 struct prio_array
   {
-    char bitmap_buf[16];  // bitmap_buf_size ?¨ìˆ˜ë¥??´ìš©?˜ì—¬ ?Œì•„???˜ì¹˜
+    char bitmap_buf[16];
     struct bitmap *bm;
     struct list queue[PRI_MAX-PRI_MIN+1];	// 0~63 : total 64
   };
@@ -115,11 +115,8 @@ thread_init (void)
   lock_init (&tid_lock);
 	
 	// LOGOS-ADDED
-	list_init (run_queue.arrays[0].queue);
-	list_init (run_queue.arrays[1].queue);
-
   int i = 0;
-	for (; PRI_MAX - PRI_MIN + 1 >= i; i++)
+	for (; PRI_MAX - PRI_MIN >= i; i++)
   {
     list_init (&run_queue.arrays[0].queue[i]);
     list_init (&run_queue.arrays[1].queue[i]);
@@ -132,8 +129,8 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 
 	// LOGOS-ADDED
-	run_queue.arrays[0].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, run_queue.arrays[0].bitmap_buf, bitmap_buf_size (PRI_MAX-PRI_MIN+1));
-	run_queue.arrays[1].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, run_queue.arrays[1].bitmap_buf, bitmap_buf_size (PRI_MAX-PRI_MIN+1));
+	run_queue.arrays[0].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, run_queue.arrays[0].bitmap_buf, sizeof(run_queue.arrays[0].bitmap_buf));
+	run_queue.arrays[1].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, run_queue.arrays[1].bitmap_buf, sizeof(run_queue.arrays[1].bitmap_buf));
 
 	run_queue.active = &run_queue.arrays[0];
 	run_queue.expired = &run_queue.arrays[1];
@@ -301,20 +298,21 @@ void
 thread_unblock (struct thread *t) 
 {
   /* LOGOS-ADDED */
+  enum intr_level old_level;
+
   ASSERT(!is_scheduling_started || intr_context () || intr_get_level () == INTR_ON);
 
+  old_level = intr_disable ();
   thread_unblock_without_preemption (t);
   /* LOGOS-ADDED */
-  if(!is_scheduling_started)
-	  return;
-
-  if (thread_get_priority() < t->priority)
+  if (is_scheduling_started && thread_get_priority() < t->priority)
   {
 	  if(intr_context ())
 		intr_yield_on_return();
 	  else
 		thread_yield();
   }
+  intr_set_level (old_level);
 }
 
 /* LOGOS-ADDED
@@ -448,7 +446,7 @@ thread_set_priority (int new_priority)
   if (is_scheduling_started && old__priority > new_priority)
     {
       unsigned idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
-      if (BITMAP_ERROR != idx && PRI_MAX - idx > (unsigned)new_priority) // ???°ì„ ?œìœ„ë³´ë‹¤ ?’ì? ?°ì„ ?œìœ„???€ê¸?ì¤??‘ì—…???ˆìŒ
+      if (BITMAP_ERROR != idx && PRI_MAX - idx > (unsigned)new_priority)
         thread_yield();
     }
   intr_set_level (old_level);
@@ -607,7 +605,7 @@ next_thread_to_run (void)
   unsigned idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
 	if (BITMAP_ERROR == idx)
     {
-      idx = bitmap_scan (run_queue.expired->bm, 0, 1, true);  // active queueê°€ ë¹„ì—ˆ?¼ë?ë¡?expired queue??taskê°€ ?ˆë‚˜ ?•ì¸
+      idx = bitmap_scan (run_queue.expired->bm, 0, 1, true);
       if (BITMAP_ERROR == idx)
         {
           // no task
