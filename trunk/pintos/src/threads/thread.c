@@ -72,7 +72,7 @@ static bool is_scheduling_started;
 // LOGOS-EDITED we don't need it more.
 //#define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 
-#define TIME_SLICE_MIN 5  /* LOGOS-ADDED */
+#define TIME_SLICE_MIN ((unsigned)5)  /* LOGOS-ADDED */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 /* If false (default), use round-robin scheduler.
@@ -91,6 +91,8 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static bool is_thread_time_slice_expired(void);
+static unsigned thread_get_time_slice(void);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -157,6 +159,26 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
+/* LOGOS_ADDED */
+static bool
+is_thread_time_slice_expired (void)
+{
+  struct thread *t = thread_current ();
+  if (t->remained_ticks && thread_ticks >= t->remained_ticks)
+	return true;
+ 
+  if (thread_ticks >= thread_get_time_slice())
+    return true;
+  return false;
+}
+
+/* LOGOS_ADDED */
+static unsigned 
+thread_get_time_slice (void)
+{
+  return thread_get_priority() + TIME_SLICE_MIN;  // time slice = priority + TIME_SLICE_MIN(5 tick)
+}
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -174,20 +196,11 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  /* Enforce preemption. */
-
-  unsigned ticks = t->priority + TIME_SLICE_MIN;  // time slice = priority + TIME_SLICE_MIN(5 tick)
   ++thread_ticks;
 
-  /* LOGOS-EDITED : 중간???�점???�레??처리 */
-  if (t->remained_ticks && thread_ticks >= t->remained_ticks)
-    {
-      t->remained_ticks = 0;
-      intr_yield_on_return ();
-      return;
-    }
- 
-  if (thread_ticks >= ticks)	
+  /* Enforce preemption. */
+  /* LOGOS-EDITED */
+  if(is_thread_time_slice_expired())
     intr_yield_on_return ();
 }
 
@@ -391,17 +404,20 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread)
 	{
-		// LOGOS-EDITED 
-    if (thread_ticks >= (unsigned)(cur->priority + TIME_SLICE_MIN))
+	  // LOGOS-EDITED 
+      if (is_thread_time_slice_expired())
       {
-	      list_push_back (&(run_queue.expired->queue[PRI_MAX - cur->priority]), &cur->elem);
+        list_push_back (&(run_queue.expired->queue[PRI_MAX - cur->priority]), &cur->elem);
         bitmap_mark (run_queue.expired->bm, PRI_MAX - cur->priority);
+		cur->remained_ticks = 0;
       }
-    else
+      else
       {
-	      list_push_back (&(run_queue.active->queue[PRI_MAX - cur->priority]), &cur->elem);
+        list_push_back (&(run_queue.active->queue[PRI_MAX - cur->priority]), &cur->elem);
         bitmap_mark (run_queue.active->bm, PRI_MAX - cur->priority);
-        cur->remained_ticks = cur->priority + TIME_SLICE_MIN - thread_ticks;  // save ticks remained
+		if(!cur->remained_ticks)
+		  cur->remained_ticks = thread_get_time_slice();
+        cur->remained_ticks = cur->remained_ticks - thread_ticks;  // save ticks remained
       }
 	}
   cur->status = THREAD_READY;
