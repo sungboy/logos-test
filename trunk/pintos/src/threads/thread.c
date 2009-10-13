@@ -431,12 +431,16 @@ thread_yield (void)
 void
 thread_set_priority (int new_priority) 
 {
+  /* LOGOS-ADDED */
+  ASSERT(!is_scheduling_started || intr_get_level () == INTR_ON);
+
   int old__priority = thread_current ()->priority;
   enum intr_level old_level;
 
   old_level = intr_disable ();
   thread_current ()->priority = new_priority;
-  if (old__priority > new_priority)
+
+  if (is_scheduling_started && old__priority > new_priority)
     {
       unsigned idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
       if (BITMAP_ERROR != idx && PRI_MAX - idx > (unsigned)new_priority) // ???°ì„ ?œìœ„ë³´ë‹¤ ?’ì? ?°ì„ ?œìœ„???€ê¸?ì¤??‘ì—…???ˆìŒ
@@ -592,7 +596,8 @@ static struct thread *
 next_thread_to_run (void) 
 {
   // LOGOS-EDITED
-	ASSERT (run_queue.active->bm);
+  ASSERT (run_queue.active->bm);
+  ASSERT (run_queue.expired->bm);
 
   unsigned idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
 	if (BITMAP_ERROR == idx)
