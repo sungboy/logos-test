@@ -85,7 +85,7 @@ bitmap_destroy(bm);
 
 = 박동민 조항준 코드 2차 동료검토(2009/10/13) =
 == 작성 코드 검토(thread.c) ==
-<br>177 줄 - if (~ && thread_ticks >= t->remained_ticks) 일 듯? 
+177 줄 - if (~ && thread_ticks >= t->remained_ticks) 일 듯? 
 <br>177~187 줄 - thread_ticks를 그냥 맨 앞에서 한번 thread_ticks++; 한 후에 뒤에서는 이미 ++되어 있다고 생각하는 것이 더 편할 듯? 그래야 괜히 +1, 중간 ++ 안 해도 될 듯... 
 <br>
 <br>thread_unblock - thread_unblock 선점 처리 구현 안 됨
