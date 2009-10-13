@@ -186,6 +186,8 @@ thread_tick (void)
 {
   struct thread *t = thread_current ();
 
+  ASSERT (intr_context ());
+
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -429,16 +431,18 @@ thread_yield (void)
 void
 thread_set_priority (int new_priority) 
 {
-  if (thread_current ()->priority > new_priority)
+  int old__priority = thread_current ()->priority;
+  enum intr_level old_level;
+
+  old_level = intr_disable ();
+  thread_current ()->priority = new_priority;
+  if (old__priority > new_priority)
     {
       unsigned idx = bitmap_scan (run_queue.active->bm, 0, 1, true);
       if (BITMAP_ERROR != idx && PRI_MAX - idx > (unsigned)new_priority) // ???°ì„ ?œìœ„ë³´ë‹¤ ?’ì? ?°ì„ ?œìœ„???€ê¸?ì¤??‘ì—…???ˆìŒ
-        {
-          thread_yield();
-        }
+        thread_yield();
     }
-
-  thread_current ()->priority = new_priority;
+  intr_set_level (old_level);
 }
 
 /* Returns the current thread's priority. */
