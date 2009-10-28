@@ -462,3 +462,41 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+/* LOGOS-ADDED FUNCTION
+   Check whether the address, uvaddr is a valid user virtual address. */
+bool
+process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool writable)
+{
+  void *upage, *upagec;
+  uintptr_t pg_count;
+  struct thread *t;
+  int i;
+  uint32_t *pd;
+
+  if (!is_user_vaddr (uvaddr))
+    return false;
+
+  upage = pg_round_down (uvaddr);
+  pg_count = pg_no (pg_round_down (uvaddr + size - 1)) - pg_no (upage) + 1;
+
+  t = thread_current ();
+  pd = t->pagedir;
+
+  for (i=0; i<pg_count; i++)
+    {
+	  upagec = upage + (i << PGBITS);
+	  if (writable)
+        {
+          if (!pagedir_is_writable (pd, upagec))
+            return false;
+        }
+	  else
+	    {
+	      if (!pagedir_is_readable (pd, upagec))
+		    return false;
+	    }
+    }
+
+  return true;
+}

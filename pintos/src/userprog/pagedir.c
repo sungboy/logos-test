@@ -261,3 +261,37 @@ invalidate_pagedir (uint32_t *pd)
       pagedir_activate (pd);
     } 
 }
+
+/* LOGOS-ADDED FUNCTION
+   Looks up the page and check whether the page is readable. */
+bool
+pagedir_is_readable (uint32_t *pd, const void *uaddr)
+{
+  uint32_t *pte;
+
+  ASSERT (is_user_vaddr (uaddr));
+  
+  pte = lookup_page (pd, uaddr, false);
+  if (pte != NULL)
+    if ((*pte & PTE_P) != 0)
+      return true;
+
+  return false;
+}
+
+/* LOGOS-ADDED FUNCTION
+   Looks up the page and check whether the page is writable. */
+bool
+pagedir_is_writable (uint32_t *pd, const void *uaddr)
+{
+  uint32_t *pte;
+
+  ASSERT (is_user_vaddr (uaddr));
+  
+  pte = lookup_page (pd, uaddr, false);
+  if (pte != NULL)
+    if ((*pte & PTE_P & PTE_W) != 0)
+      return true;
+
+  return false;
+}
