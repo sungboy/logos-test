@@ -290,7 +290,7 @@ pagedir_is_writable (uint32_t *pd, const void *uaddr)
   
   pte = lookup_page (pd, uaddr, false);
   if (pte != NULL)
-    if ((*pte & PTE_P & PTE_W) != 0)
+    if ((*pte & PTE_P) != 0 && (*pte & PTE_W) != 0)
       return true;
 
   return false;
