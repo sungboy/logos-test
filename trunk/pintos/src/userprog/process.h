@@ -8,4 +8,6 @@ int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
 
+bool process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool writable);
+
 #endif /* userprog/process.h */
