@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 #include <user/syscall.h>
 #include "userprog/process.h"
+#include "devices/input.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -154,16 +155,16 @@ syscall_handler (struct intr_frame *f)
   if (!process_is_valid_user_virtual_address (f->esp, sizeof(int), false))
     {
       /* TODO : Add some code if necessary. */
-      printf("Invalid System Call\n");
+      printf("Invalid System Call : Invalid ESP. \n");
       process_exit ();
 	  thread_exit ();
     }
 
   syscall_num = *((uint32_t*)f->esp);
-  if (syscall_num < 0 || syscall_num >= SYS_CALL_COUNT)
+  if (syscall_num >= SYS_CALL_COUNT)
     {
       /* TODO : Add some code if necessary. */
-      printf("Invalid System Call\n");
+      printf("Invalid System Call : Invalid System Call Number. \n");
       process_exit ();
 	  thread_exit ();
     }
@@ -175,7 +176,7 @@ syscall_handler (struct intr_frame *f)
 	  if (!process_is_valid_user_virtual_address (((uint32_t*)f->esp) + 1 + i, sizeof(int), false))
 	    {
 	      /* TODO : Add some code if necessary. */
-          printf("Invalid System Call\n");
+          printf("Invalid System Call : Invalid Argument %d. \n", i);
 	      process_exit ();
 	  	  thread_exit ();
 	    }
@@ -239,9 +240,15 @@ sys_exit (int status)
   /* syscall1 (SYS_EXIT, status); */
   /* NOT_REACHED (); */
 
-  /* TODO : Implement Here. */
-  printf("sys_exit : not implemented yet. \n");
-  return;
+  /* TODO : Add some code to return status. */
+  
+  /* Termination Message */
+  printf("%s: exit(%d)\n", "", status); /* TODO : Implement Here Correctly. */
+
+  /* TODO : Add some code if necessary. */
+  process_exit ();
+  thread_exit ();
+  NOT_REACHED ();
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -323,7 +330,32 @@ sys_read (int fd, void *buffer, unsigned size)
   /* The Relevant user code is as follows. */
   /* return syscall3 (SYS_READ, fd, buffer, size); */
 
-  /* TODO : Implement Here. */
+  int i;
+
+  if (!process_is_valid_user_virtual_address (buffer, size, true))
+	{
+	  /* TODO : Add some code if necessary. */
+		printf("Invalid System Call(sys_read) : Invalid Buffer\n");
+      process_exit ();
+      thread_exit ();
+    }
+
+  /* Standard Input/Output Processing */
+  switch(fd)
+    {
+    case STDIN_FILENO:
+        for (i=0; i<size; i++)
+          ((uint8_t*)buffer)[i] = input_getc ();
+        return size;
+    case STDOUT_FILENO:
+		/* Do Nothing. */
+		return 0;
+    default:
+		break;
+    }
+
+  /* TODO : Implement Here Correctly. */
+  /* ... */
   printf("sys_read : not implemented yet. \n");
   return -1;
 }
@@ -335,8 +367,31 @@ sys_write (int fd, const void *buffer, unsigned size)
   /* The Relevant user code is as follows. */
   /* return syscall3 (SYS_WRITE, fd, buffer, size); */
 
-  /* TODO : Implement Here. */
+  if (!process_is_valid_user_virtual_address (buffer, size, false))
+	{
+	  /* TODO : Add some code if necessary. */
+      printf("Invalid System Call(sys_write) : Invalid Buffer\n");
+      process_exit ();
+      thread_exit ();
+    }
+
+  /* Standard Input/Output Processing */
+  switch(fd)
+    {
+    case STDIN_FILENO:
+		/* Do Nothing. */
+		return 0;
+    case STDOUT_FILENO:
+		putbuf (buffer, size);
+		return size;
+    default:
+		break;
+    }
+
+  /* TODO : Implement Here Correctly. */
+  /* ... */
   printf("sys_write : not implemented yet. \n");
+
   return -1;
 }
 

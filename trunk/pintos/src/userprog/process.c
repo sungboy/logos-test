@@ -436,7 +436,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
+        *esp = PHYS_BASE - 12; // PHYS_BASE; /* LOGOS-TEMP */
       else
         palloc_free_page (kpage);
     }
@@ -498,5 +498,23 @@ process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool wri
 	    }
     }
 
+  return true;
+}
+
+/* LOGOS-ADDED FUNCTION */
+bool
+process_is_valid_user_virtual_address_for_string_read (const void *ustr)
+{
+  const char *p = (const char*)ustr;
+  while (1)
+  {
+    if (!process_is_valid_user_virtual_address (p, 1, false))
+      return false;
+
+    if(*p == '\0')
+      break;
+
+    p++;
+  }
   return true;
 }
