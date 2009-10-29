@@ -39,6 +39,9 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
+  ASSERT(!intr_context());
+  ASSERT(intr_get_level() == INTR_ON);
+
   /* System call parameter counts. */
   const int arg_no[] = 
   {
@@ -238,13 +241,38 @@ sys_exit (int status)
   /* syscall1 (SYS_EXIT, status); */
   /* NOT_REACHED (); */
 
-  /* TODO : Add some code to return status. */
+  struct thread *t = thread_current ();
+  struct thread *parent;
+  enum intr_level old_level;
   
   /* Termination Message */
   printf("%s: exit(%d)\n", thread_name (), status);
 
+  /* Move children. */
+  thread_remove_child_relation (true);
+
+  /* Set exit code, interact with parent, and release. */
+  t->exit_code = status;
+
+  lock_acquire (&thread_relation_lock);
+  t->user_process_state = PROCESS_ZOMBIE;
+  parent = t->parent;
+  lock_release (&thread_relation_lock);
+
+  if(parent != NULL)
+    {
+      sema_up (&parent->exit_sync_for_parent);
+      sema_down (&t->exit_sync_for_child);
+    }
+
+  thread_remove_parent_relation(true);
+
+  if(parent != NULL)
+    sema_up (&parent->exit_sync_for_parent);
+
+  /* Exit. */
   /* TODO : Add some code if necessary. */
-  thread_exit ();
+  thread_exit_after_removing_relation ();
   NOT_REACHED ();
 }
 
@@ -267,9 +295,7 @@ sys_wait (pid_t pid)
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_WAIT, pid); */
 
-  /* TODO : Implement Here. */
-  printf("sys_wait : not implemented yet. \n");
-  return -1;
+  return process_wait(pid);
 }
 
 /* LOGOS-ADDED FUNCTION */

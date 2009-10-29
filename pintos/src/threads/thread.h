@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -13,6 +14,18 @@ enum thread_status
     THREAD_BLOCKED,     /* Waiting for an event to trigger. */
     THREAD_DYING        /* About to be destroyed. */
   };
+
+#ifdef USERPROG
+/* User Process States */
+enum process_status
+  {
+    PROCESS_NORMAL,     /* Normal. Processed according to thread state. */
+    PROCESS_ZOMBIE,     /* Process was terminated but the struct thread has not released yet. Waiting for the 'wait' system call by parent to pass exit code. */
+  };
+
+/* LOGOS-ADDED VARIABLE */
+extern struct lock thread_relation_lock;
+#endif
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
@@ -88,20 +101,28 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int remained_ticks;                  /* LOGOS-ADDED */
+    int remained_ticks;                 /* LOGOS-ADDED */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
 #ifdef USERPROG
-    /* Owned by userprog/process.c. */
+	/* LOGOS-ADDED VARIABLE START */
+	/* Variables for general thread relation. */
+    struct thread* parent;              /* List for child. For Use, acquire thread_relation_lock first. */
+    struct list child_list;             /* List for child. For Use, acquire thread_relation_lock first. */
+    struct list_elem sibling_elem;      /* List element for connecting siblings. For Use, acquire thread_relation_lock first. */
+    /* LOGOS-ADDED VARIABLE END */
+
+	/* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-	/* LOGOS-ADDED VARIABLE */
-    struct thread* parent;             /* List for child. */
-    /* LOGOS-ADDED VARIABLE */
-    struct list child_list;             /* List for child. */
-    /* LOGOS-ADDED VARIABLE */
-    struct list_elem sibling_elem;      /* List element for connecting siblings. */
+	/* LOGOS-ADDED VARIABLE START */
+	bool is_user_process;                   /* Whether this thread is for user process or not. Can't be changed. */
+	enum process_status user_process_state; /* User process state. For Use, acquire thread_relation_lock first. */
+	struct semaphore exit_sync_for_child;   /* Used as child to wait for a parent to 'wait'. */
+	struct semaphore exit_sync_for_parent;  /* Used as parent to wait for a child to 'exit'. */
+	int exit_code;                      /* Saved Exit Code. */
+    /* LOGOS-ADDED VARIABLE END */
 #endif
 
     /* Owned by thread.c. */
@@ -121,6 +142,9 @@ void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
+#ifdef USERPROG
+tid_t thread_create_for_user_process (const char *name, int priority, thread_func *, void *);
+#endif
 
 void thread_block (void);
 void thread_unblock (struct thread *);
@@ -131,6 +155,12 @@ tid_t thread_tid (void);
 const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
+#ifdef USERPROG
+void thread_exit_after_removing_relation (void) NO_RETURN;
+void thread_remove_relation (bool lock);
+void thread_remove_child_relation (bool lock);
+void thread_remove_parent_relation (bool lock);
+#endif
 void thread_yield (void);
 
 int thread_get_priority (void);

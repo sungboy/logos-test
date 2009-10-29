@@ -36,7 +36,7 @@ static struct lock tid_lock;
 
 #ifdef USERPROG
 /* LOGOS-ADDED VARIABLE */
-static struct lock thread_relation_lock;
+struct lock thread_relation_lock;
 #endif
 
 /* Stack frame for kernel_thread(). */
@@ -71,7 +71,7 @@ struct runqueue
 
 struct runqueue run_queue;
 
-static bool is_scheduling_started;
+bool is_scheduling_started;
 /* LOGOS-ADD-END */
 
 // LOGOS-EDITED we don't need it more.
@@ -96,8 +96,9 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static bool is_thread_time_slice_expired(void);
-static unsigned thread_get_time_slice(void);
+static bool is_thread_time_slice_expired (void);
+static unsigned thread_get_time_slice (void);
+static tid_t thread_create_internal (const char *name, int priority, thread_func *function, void *aux, bool for_kernel_only);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -138,6 +139,12 @@ thread_init (void)
 
   initial_thread->parent = NULL;
   list_init (&initial_thread->child_list);
+
+  initial_thread->is_user_process = false;
+  initial_thread->user_process_state = PROCESS_NORMAL;
+  sema_init (&initial_thread->exit_sync_for_child, 0);
+  sema_init (&initial_thread->exit_sync_for_parent, 0);
+  initial_thread->exit_code = -1;
 #endif
 
   // LOGOS-ADDED
@@ -233,14 +240,50 @@ thread_print_stats (void)
    before thread_create() returns.  Contrariwise, the original
    thread may run for any amount of time before the new thread is
    scheduled.  Use a semaphore or some other form of
-   synchronization if you need to ensure ordering.
-
-   The code provided sets the new thread's `priority' member to
-   PRIORITY, but no actual priority scheduling is implemented.
-   Priority scheduling is the goal of Problem 1-3. */
+   synchronization if you need to ensure ordering. */
 tid_t
 thread_create (const char *name, int priority,
-               thread_func *function, void *aux) 
+               thread_func *function, void *aux)
+{
+  return thread_create_internal (name, priority, function, aux, true); 
+}
+
+#ifdef USERPROG
+/* LOGOS-ADDED FUNCTION
+   Creates a new thread for user process named NAME with the given initial
+   PRIORITY, which executes FUNCTION passing AUX as the argument,
+   and adds it to the ready queue.  Returns the thread identifier
+   for the new thread, or TID_ERROR if creation fails.
+
+   If thread_start() has been called, then the new thread may be
+   scheduled before thread_create() returns.  It could even exit
+   before thread_create() returns.  Contrariwise, the original
+   thread may run for any amount of time before the new thread is
+   scheduled.  Use a semaphore or some other form of
+   synchronization if you need to ensure ordering. */
+tid_t
+thread_create_for_user_process (const char *name, int priority,
+               thread_func *function, void *aux)
+{
+  return thread_create_internal (name, priority, function, aux, false); 
+}
+#endif
+
+/* LOGOS-ADDED FUNCTION
+   Creates a new thread named NAME with the given initial
+   PRIORITY, which executes FUNCTION passing AUX as the argument,
+   and adds it to the ready queue.  Returns the thread identifier
+   for the new thread, or TID_ERROR if creation fails.
+
+   If thread_start() has been called, then the new thread may be
+   scheduled before thread_create() returns.  It could even exit
+   before thread_create() returns.  Contrariwise, the original
+   thread may run for any amount of time before the new thread is
+   scheduled.  Use a semaphore or some other form of
+   synchronization if you need to ensure ordering. */
+static tid_t
+thread_create_internal (const char *name, int priority,
+               thread_func *function, void *aux, bool for_kernel_only) 
 {
   struct thread *t;
   struct kernel_thread_frame *kf;
@@ -275,6 +318,17 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
 
 #ifdef USERPROG
+  /* Initialize some variables for user process. */
+  if(for_kernel_only)
+    t->is_user_process = false;
+  else
+    t->is_user_process = true;
+
+  t->user_process_state = PROCESS_NORMAL;
+  sema_init (&t->exit_sync_for_child, 0);
+  sema_init (&t->exit_sync_for_parent, 0);
+  t->exit_code = -1;
+
   /* Build thread relation. */
   t->parent = thread_current ();
   list_init (&t->child_list);
@@ -402,37 +456,20 @@ void
 thread_exit (void) 
 {
 #ifdef USERPROG
-  struct thread* parent;
-  struct thread* tempt;
-  struct list_elem *e, *next;
+  thread_remove_relation (true);
 #endif
+  thread_exit_after_removing_relation ();
+}
 
+/* LOGOS-ADDED FUNCTION
+   Deschedules the current thread and destroys it after removing relation.  Never
+   returns to the caller. */
+void
+thread_exit_after_removing_relation (void) 
+{
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
-  /* Rebulid thread relation */
-  lock_acquire (&thread_relation_lock);
-
-  parent = thread_current()->parent;
-  if(parent)
-      list_remove (&thread_current()->sibling_elem);
-  thread_current()->parent = NULL;
-
-  for (e = list_begin (&thread_current()->child_list); e != list_end (&thread_current()->child_list);
-       e = next)
-    {
-      struct thread* tempt = list_entry (e, struct thread, sibling_elem);
-      next = list_next (e);
-
-      tempt->parent = parent;
-      list_remove (e);
-      if(parent)
-	    list_push_back (&parent->child_list, e);
-    }
-  ASSERT (list_empty (&thread_current()->child_list));
-
-  lock_release (&thread_relation_lock);
-
   /* For User Process */
   process_exit ();
 #endif
@@ -444,6 +481,81 @@ thread_exit (void)
   schedule ();
   NOT_REACHED ();
 }
+
+#ifdef USERPROG
+/* LOGOS-ADDED FUNCTION
+   Remove the relation of the current thread to other threads. */
+void
+thread_remove_relation (bool lock) 
+{
+  thread_remove_child_relation (lock);
+  thread_remove_parent_relation (lock);
+}
+
+/* LOGOS-ADDED FUNCTION
+   Remove the child relation of the current thread. */
+void
+thread_remove_child_relation (bool lock) 
+{
+  struct thread* tempt;
+  struct list_elem *e, *next;
+
+  /* Rebulid thread child relation. */
+  if(lock)
+    lock_acquire (&thread_relation_lock);
+
+  for (e = list_begin (&thread_current()->child_list); e != list_end (&thread_current()->child_list);
+       e = next)
+    {
+      tempt = list_entry (e, struct thread, sibling_elem);
+      next = list_next (e);
+
+	  if (tempt->is_user_process && tempt->user_process_state == PROCESS_ZOMBIE)
+        continue;
+
+      tempt->parent = initial_thread;
+      list_remove (e);
+	  list_push_back (&initial_thread->child_list, e);
+    }
+  
+  ASSERT (list_empty (&thread_current()->child_list));
+
+  if(lock)
+    lock_release (&thread_relation_lock);
+
+  /* Call wait for the remaining zombie user processes. 
+     Warning : No other threads will use child relation of this thread, so we don't have to get a lock. */
+  for (e = list_begin (&thread_current()->child_list); e != list_end (&thread_current()->child_list);
+       e = next)
+    {
+      tempt = list_entry (e, struct thread, sibling_elem);
+      next = list_next (e);
+
+	  ASSERT (tempt->is_user_process && tempt->user_process_state == PROCESS_ZOMBIE);
+      process_wait(tempt->tid);
+    }
+}
+
+/* LOGOS-ADDED FUNCTION
+   Remove the parent relation of the current thread. */
+void
+thread_remove_parent_relation (bool lock) 
+{
+  struct thread* parent;
+
+  /* Remove thread parent relation. */
+  if(lock)
+    lock_acquire (&thread_relation_lock);
+
+  parent = thread_current()->parent;
+  if(parent)
+      list_remove (&thread_current()->sibling_elem);
+  thread_current()->parent = NULL;
+
+  if(lock)
+    lock_release (&thread_relation_lock);
+}
+#endif
 
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
