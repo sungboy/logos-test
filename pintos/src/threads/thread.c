@@ -34,6 +34,11 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
+#ifdef USERPROG
+/* LOGOS-ADDED VARIABLE */
+static struct lock thread_relation_lock;
+#endif
+
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -128,14 +133,21 @@ thread_init (void)
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 
-	// LOGOS-ADDED
-	run_queue.arrays[0].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, run_queue.arrays[0].bitmap_buf, sizeof(run_queue.arrays[0].bitmap_buf));
-	run_queue.arrays[1].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, run_queue.arrays[1].bitmap_buf, sizeof(run_queue.arrays[1].bitmap_buf));
+#ifdef USERPROG
+  lock_init (&thread_relation_lock);
 
-	run_queue.active = &run_queue.arrays[0];
-	run_queue.expired = &run_queue.arrays[1];
+  initial_thread->parent = NULL;
+  list_init (&initial_thread->child_list);
+#endif
 
-	is_scheduling_started = false;
+  // LOGOS-ADDED
+  run_queue.arrays[0].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, run_queue.arrays[0].bitmap_buf, sizeof(run_queue.arrays[0].bitmap_buf));
+  run_queue.arrays[1].bm = bitmap_create_in_buf (PRI_MAX-PRI_MIN+1, run_queue.arrays[1].bitmap_buf, sizeof(run_queue.arrays[1].bitmap_buf));
+
+  run_queue.active = &run_queue.arrays[0];
+  run_queue.expired = &run_queue.arrays[1];
+
+  is_scheduling_started = false;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -262,6 +274,16 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
 
+#ifdef USERPROG
+  /* Build thread relation. */
+  t->parent = thread_current ();
+  list_init (&t->child_list);
+
+  lock_acquire (&thread_relation_lock);
+  list_push_back (&t->parent->child_list, &t->sibling_elem);
+  lock_release (&thread_relation_lock);
+#endif
+
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -379,9 +401,39 @@ thread_tid (void)
 void
 thread_exit (void) 
 {
+#ifdef USERPROG
+  struct thread* parent;
+  struct thread* tempt;
+  struct list_elem *e, *next;
+#endif
+
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
+  /* Rebulid thread relation */
+  lock_acquire (&thread_relation_lock);
+
+  parent = thread_current()->parent;
+  if(parent)
+      list_remove (&thread_current()->sibling_elem);
+  thread_current()->parent = NULL;
+
+  for (e = list_begin (&thread_current()->child_list); e != list_end (&thread_current()->child_list);
+       e = next)
+    {
+      struct thread* tempt = list_entry (e, struct thread, sibling_elem);
+      next = list_next (e);
+
+      tempt->parent = parent;
+      list_remove (e);
+      if(parent)
+	    list_push_back (&parent->child_list, e);
+    }
+  ASSERT (list_empty (&thread_current()->child_list));
+
+  lock_release (&thread_relation_lock);
+
+  /* For User Process */
   process_exit ();
 #endif
 

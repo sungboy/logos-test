@@ -156,7 +156,6 @@ syscall_handler (struct intr_frame *f)
     {
       /* TODO : Add some code if necessary. */
       printf("Invalid System Call : Invalid ESP. \n");
-      process_exit ();
 	  thread_exit ();
     }
 
@@ -165,7 +164,6 @@ syscall_handler (struct intr_frame *f)
     {
       /* TODO : Add some code if necessary. */
       printf("Invalid System Call : Invalid System Call Number. \n");
-      process_exit ();
 	  thread_exit ();
     }
 
@@ -177,7 +175,6 @@ syscall_handler (struct intr_frame *f)
 	    {
 	      /* TODO : Add some code if necessary. */
           printf("Invalid System Call : Invalid Argument %d. \n", i);
-	      process_exit ();
 	  	  thread_exit ();
 	    }
 
@@ -227,9 +224,10 @@ sys_halt (void)
   /* syscall0 (SYS_HALT); */
   /* NOT_REACHED (); */
 
-  /* TODO : Implement Here. */
-  printf("sys_halt : not implemented yet. \n");
-  return;
+  /* TODO : Implement Here Correctly. */
+  /* ... */
+  power_off ();
+  NOT_REACHED ();
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -243,10 +241,9 @@ sys_exit (int status)
   /* TODO : Add some code to return status. */
   
   /* Termination Message */
-  printf("%s: exit(%d)\n", "", status); /* TODO : Implement Here Correctly. */
+  printf("%s: exit(%d)\n", thread_name (), status);
 
   /* TODO : Add some code if necessary. */
-  process_exit ();
   thread_exit ();
   NOT_REACHED ();
 }
@@ -258,9 +255,9 @@ sys_exec (const char *file)
   /* The Relevant user code is as follows. */
   /* return (pid_t) syscall1 (SYS_EXEC, file); */
 
-  /* TODO : Implement Here. */
-  printf("sys_exec : not implemented yet. \n");
-  return -1;
+  /* TODO : Implement Here Correctly. */
+  /* ... */
+  return process_execute (file);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -336,7 +333,6 @@ sys_read (int fd, void *buffer, unsigned size)
 	{
 	  /* TODO : Add some code if necessary. */
 		printf("Invalid System Call(sys_read) : Invalid Buffer\n");
-      process_exit ();
       thread_exit ();
     }
 
@@ -348,6 +344,9 @@ sys_read (int fd, void *buffer, unsigned size)
           ((uint8_t*)buffer)[i] = input_getc ();
         return size;
     case STDOUT_FILENO:
+		/* Do Nothing. */
+		return 0;
+    case 2:
 		/* Do Nothing. */
 		return 0;
     default:
@@ -371,7 +370,6 @@ sys_write (int fd, const void *buffer, unsigned size)
 	{
 	  /* TODO : Add some code if necessary. */
       printf("Invalid System Call(sys_write) : Invalid Buffer\n");
-      process_exit ();
       thread_exit ();
     }
 
@@ -384,6 +382,9 @@ sys_write (int fd, const void *buffer, unsigned size)
     case STDOUT_FILENO:
 		putbuf (buffer, size);
 		return size;
+    case 2:
+		/* Do Nothing. */
+		return 0;
     default:
 		break;
     }
