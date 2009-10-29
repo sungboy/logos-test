@@ -123,6 +123,10 @@ main (void)
   /* Finish up. */
   if (power_off_when_done)
     power_off ();
+#ifdef USERPROG
+  intr_disable ();
+  thread_block();
+#endif
   thread_exit ();
 }
 

@@ -39,7 +39,7 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, execute_thread, fn_copy);
+  tid = thread_create_for_user_process (file_name, PRI_DEFAULT, execute_thread, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -84,7 +84,7 @@ execute_thread (void *file_name_)
   /* LOGOS-ADDED: passing arguments */
   int i;
   void* sp = if_.esp;
-  char *argp[MAX_ARGS]; // argv가 스택에 저장된 주소
+  char *argp[MAX_ARGS]; // argv가 ?�택???�?�된 주소
   for (i = 0; i < argc; i++)
   {
     char *arg = argv[argc-1-i];
@@ -136,14 +136,52 @@ execute_thread (void *file_name_)
    exception), returns -1.  If TID is invalid or if it was not a
    child of the calling process, or if process_wait() has already
    been successfully called for the given TID, returns -1
-   immediately, without waiting.
-
-   This function will be implemented in problem 2-2.  For now, it
-   does nothing. */
+   immediately, without waiting. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  return -1;
+  struct thread* t = thread_current();
+  struct thread* child;
+  struct list_elem *e, *next;
+  bool found = false;
+  int ret = -1;
+
+  /* Find the child. */
+  lock_acquire (&thread_relation_lock);
+
+  for (e = list_begin (&t->child_list); e != list_end (&t->child_list);
+       e = next)
+    {
+      child = list_entry (e, struct thread, sibling_elem);
+      next = list_next (e);
+
+      if(child->tid == child_tid)
+        {
+          found = 1;
+          break;
+        }
+    }
+  if (!found || !child->is_user_process)
+    {
+      lock_release (&thread_relation_lock);
+      return -1;
+    }
+
+  lock_release (&thread_relation_lock);
+
+  /* Wait for the child to call 'exit'. */
+  sema_down (&t->exit_sync_for_parent);
+
+  /* Read exit code. */
+  ASSERT(child->user_process_state == PROCESS_ZOMBIE);
+  ret = child->exit_code;
+
+  /* Wait for the child to release resource. */
+  sema_up (&child->exit_sync_for_child);
+  sema_down (&t->exit_sync_for_parent);
+
+  /* Return. */
+  return ret;
 }
 
 /* Free the current process's resources. */
@@ -491,7 +529,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;// - 12; // PHYS_BASE; /* LOGOS-TEMP */
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
