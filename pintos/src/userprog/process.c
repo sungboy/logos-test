@@ -54,17 +54,72 @@ execute_thread (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  /* LOGOS-ADDED parsing arguments */
+#define MAX_ARGS 64
+#define MAX_ARG_LEN 8
+  char argv[MAX_ARGS][MAX_ARG_LEN];
+  int argc = 0;
+
+  char *token, *save_ptr;
+
+  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
+  {
+    //printf( "Token %d is %s", argc, token);
+    strlcpy (argv[argc], token, MAX_ARG_LEN);
+    argc++;
+  }  
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (argv[0], &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
+
+  /* LOGOS-ADDED: passing arguments */
+  int i;
+  void* sp = if_.esp;
+  char *argp[MAX_ARGS]; // argv가 스택에 저장된 주소
+  for (i = 0; i < argc; i++)
+  {
+    char *arg = argv[argc-1-i];
+    int len = strlen (arg) + 1; // 1 for null
+    sp = (char *)sp - len;
+    argp[argc-1-i] = sp;
+    strlcpy (sp, arg, len);
+  }
+
+  sp = (uint8_t*)sp - 1;  // for word-align
+  memset (sp, 0, 1);
+
+  sp = (char **)sp - 1; // for last null argv
+  memset (sp, 0, sizeof (char *));
+
+  for (i = 0; i < argc; i++)
+  {
+    sp = (char **)sp - 1;
+    *(char **)sp = argp[argc-1-i];
+  }
+
+  char** pargv = sp;
+  sp = (char ***)sp - 1;
+  *(char ***)sp = pargv;
+
+  sp = (int*)sp - 1;
+  *(int *)sp = argc;
+
+  sp = (void **)sp - 1;
+  *(void **)sp = (void *)0;
+    
+
+  //hex_dump (0, if_.esp - (if_.esp - sp), if_.esp - sp, true);
+
+  if_.esp = sp; // for test using sp
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -436,7 +491,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12; // PHYS_BASE; /* LOGOS-TEMP */
+        *esp = PHYS_BASE;// - 12; // PHYS_BASE; /* LOGOS-TEMP */
       else
         palloc_free_page (kpage);
     }
