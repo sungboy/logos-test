@@ -96,6 +96,12 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+	/* LOGOS-ADDED VARIABLE */
+    struct thread* parent;             /* List for child. */
+    /* LOGOS-ADDED VARIABLE */
+    struct list child_list;             /* List for child. */
+    /* LOGOS-ADDED VARIABLE */
+    struct list_elem sibling_elem;      /* List element for connecting siblings. */
 #endif
 
     /* Owned by thread.c. */
