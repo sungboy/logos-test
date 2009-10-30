@@ -46,7 +46,7 @@ intq_getc (struct intq *q)
       ASSERT (!intr_context ());
       lock_acquire (&q->lock);
       wait (q, &q->not_empty);
-      lock_release (&q->lock);
+      lock_release_with_preemption (&q->lock);
     }
   
   byte = q->buf[q->tail];
@@ -68,7 +68,7 @@ intq_putc (struct intq *q, uint8_t byte)
       ASSERT (!intr_context ());
       lock_acquire (&q->lock);
       wait (q, &q->not_full);
-      lock_release (&q->lock);
+      lock_release_with_preemption (&q->lock);
     }
 
   q->buf[q->head] = byte;
