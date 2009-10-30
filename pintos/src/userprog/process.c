@@ -213,6 +213,13 @@ process_exit (void)
 
   /* Destory the file table of the current process. */
   process_destroy_file_table(cur);
+
+  /* Allow write. */
+  if(cur->exe_file)
+    {
+      file_allow_write (cur->exe_file);
+      file_close(cur->exe_file);
+    }
 }
 
 /* Sets up the CPU for running user code in the current
@@ -327,6 +334,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
 
+  /* Deny Write. */
+  file_deny_write (file);
+  t->exe_file = file;
+
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
@@ -410,7 +421,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 
