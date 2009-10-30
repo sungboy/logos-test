@@ -99,6 +99,7 @@ static tid_t allocate_tid (void);
 static bool is_thread_time_slice_expired (void);
 static unsigned thread_get_time_slice (void);
 static tid_t thread_create_internal (const char *name, int priority, thread_func *function, void *aux, bool for_kernel_only);
+void thread_exit_after_removing_relation (void);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -473,6 +474,7 @@ thread_exit (void)
   thread_remove_relation (true);
 #endif
   thread_exit_after_removing_relation ();
+  NOT_REACHED ();
 }
 
 /* LOGOS-ADDED FUNCTION

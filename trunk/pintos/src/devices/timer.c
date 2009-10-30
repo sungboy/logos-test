@@ -207,11 +207,11 @@ timer_interrupt (struct intr_frame *args UNUSED)
     {
       struct timer_sleep_waiter *w = list_entry (e, struct timer_sleep_waiter, elem);
       next = list_next (e);
-      if (w->expires <= current_time)
-        {
-          list_remove (e);
-          thread_unblock (w->waiter);
-        }
+      if (w->expires > current_time)
+		  break;
+
+      list_remove (e);
+      thread_unblock (w->waiter);
     }
 
   /* Call thread_tick. */
