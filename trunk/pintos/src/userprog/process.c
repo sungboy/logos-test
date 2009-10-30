@@ -17,6 +17,9 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/syscall.h"
+#include <kernel/hash.h>
+#include "threads/malloc.h"
 
 static thread_func execute_thread NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -610,4 +613,97 @@ process_is_valid_user_virtual_address_for_string_read (const void *ustr)
     p++;
   }
   return true;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+static unsigned
+hash_hash_file_table_struct (const struct hash_elem *element, void *aux UNUSED)
+{
+	struct file_table_struct* fts = hash_entry(element, struct file_table_struct, elem);
+	return fts->fd;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+static bool
+hash_less_file_table_struct (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
+{
+	struct file_table_struct* ftsa = hash_entry(a, struct file_table_struct, elem);
+	struct file_table_struct* ftsb = hash_entry(b, struct file_table_struct, elem);
+
+	return ftsa->fd < ftsb->fd;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+bool
+process_init_file_table(struct thread* t)
+{
+  lock_init(&t->file_table_lock);
+  t->nextfd = 3;
+
+  #define EXPTECTED_MAX_FILE_COUNT 128 /* According to pintos document, we can use 128 as max file count per process if necessary. */
+
+  /* Set initial size EXPTECTED_MAX_FILE_COUNT * 2 to ensure approximately O(1) access time for EXPTECTED_MAX_FILE_COUNT files per process.
+  Although we can't ensure O(1) access time, we can use more than EXPTECTED_MAX_FILE_COUNT files per process because the hash table using chaining is flexible enough to allow it. */
+  size_t initial_size = EXPTECTED_MAX_FILE_COUNT * 2; // Must be 2^k. 
+  return hash_init_with_init_size (&t->file_table, hash_hash_file_table_struct, hash_less_file_table_struct, t, initial_size);
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+struct file_table_struct*
+process_get_new_file_table_struct(struct thread* t, struct file* f)
+{
+  int startfd;
+  bool first;
+  struct file_table_struct* ret;
+  struct file_table_struct temp;
+
+  ret = (struct file_table_struct*)malloc (sizeof (struct file_table_struct));
+  if(ret == NULL)
+	  return NULL;
+
+  lock_acquire (&t->file_table_lock);
+  ASSERT (t->nextfd >= 3);
+
+  /* Allocate fd to use. */
+  startfd = t->nextfd;
+  first = true;
+  while (1)
+    {
+      /* No fd to allocate. */
+	  if (!first && t->nextfd == startfd)
+        {
+		  free (ret);
+          lock_release (&t->file_table_lock);
+		  return NULL;
+        }
+
+      temp.fd = t->nextfd;
+	  temp.file = NULL;
+	  /* If current fd is not used */
+      if (hash_find (&t->file_table, &temp) == NULL)
+        {
+          ret->fd = t->nextfd;
+          t->nextfd++;
+          if(t->nextfd < 3)
+            t->nextfd = 3;
+          break;
+        }
+
+      t->nextfd++;
+      if(t->nextfd < 3)
+        t->nextfd = 3;
+      first = false;
+    }
+  
+  /* Fill other fields in struct file_table_struct. */
+  ret->file = f;
+  hash_insert (&t->file_table, &ret->elem);
+
+  lock_release (&t->file_table_lock);
+
+  return ret;
 }

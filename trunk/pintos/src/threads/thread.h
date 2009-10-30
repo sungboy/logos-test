@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "synch.h"
+#include <kernel/hash.h>
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -109,19 +110,24 @@ struct thread
 #ifdef USERPROG
 	/* LOGOS-ADDED VARIABLE START */
 	/* Variables for general thread relation. */
-    struct thread* parent;              /* List for child. For Use, acquire thread_relation_lock first. */
-    struct list child_list;             /* List for child. For Use, acquire thread_relation_lock first. */
-    struct list_elem sibling_elem;      /* List element for connecting siblings. For Use, acquire thread_relation_lock first. */
+    struct thread* parent;              /* List for child. For use, acquire thread_relation_lock first. */
+    struct list child_list;             /* List for child. For use, acquire thread_relation_lock first. */
+    struct list_elem sibling_elem;      /* List element for connecting siblings. For use, acquire thread_relation_lock first. */
     /* LOGOS-ADDED VARIABLE END */
 
 	/* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 	/* LOGOS-ADDED VARIABLE START */
 	bool is_user_process;                   /* Whether this thread is for user process or not. Can't be changed. */
-	enum process_status user_process_state; /* User process state. For Use, acquire thread_relation_lock first. */
+	enum process_status user_process_state; /* User process state. For use, acquire thread_relation_lock first. */
+
 	struct semaphore exit_sync_for_child;   /* Used as child to wait for a parent to 'wait'. */
 	struct semaphore exit_sync_for_parent;  /* Used as parent to wait for a child to 'exit'. */
-	int exit_code;                      /* Saved Exit Code. */
+	int exit_code;                          /* Saved Exit Code. */
+
+	struct lock file_table_lock;            /* Lock for the file table. */
+	struct hash file_table;                 /* File table for the user process. For use, qcquire file_table_lock lock first. */
+	int nextfd;                          /* Next fd to allocate. For use, qcquire file_table_lock lock first. */
     /* LOGOS-ADDED VARIABLE END */
 #endif
 
