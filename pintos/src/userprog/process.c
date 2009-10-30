@@ -79,7 +79,7 @@ execute_thread (void *file_name_)
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
-    thread_exit ();
+    sys_exit (-1);
 
   /* LOGOS-ADDED: passing arguments */
   int i;
