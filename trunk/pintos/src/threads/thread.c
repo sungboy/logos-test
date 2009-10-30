@@ -148,6 +148,8 @@ thread_init (void)
 
   /* The following code is moved because it requires a new page. */
   // process_init_file_table(initial_thread);
+
+  initial_thread->exe_file = NULL;
 #endif
 
   // LOGOS-ADDED
@@ -338,6 +340,8 @@ thread_create_internal (const char *name, int priority,
   t->exit_code = -1;
 
   process_init_file_table(t);
+
+  t->exe_file = NULL;
 
   /* Build thread relation. */
   t->parent = thread_current ();

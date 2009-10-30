@@ -118,16 +118,18 @@ struct thread
 	/* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 	/* LOGOS-ADDED VARIABLE START */
-	bool is_user_process;                   /* Whether this thread is for user process or not. Can't be changed. */
-	enum process_status user_process_state; /* User process state. For use, acquire thread_relation_lock first. */
+    bool is_user_process;                   /* Whether this thread is for user process or not. Can't be changed. */
+    enum process_status user_process_state; /* User process state. For use, acquire thread_relation_lock first. */
 
-	struct semaphore exit_sync_for_child;   /* Used as child to wait for a parent to 'wait'. */
-	struct semaphore exit_sync_for_parent;  /* Used as parent to wait for a child to 'exit'. */
-	int exit_code;                          /* Saved Exit Code. */
+    struct semaphore exit_sync_for_child;   /* Used as child to wait for a parent to 'wait'. */
+    struct semaphore exit_sync_for_parent;  /* Used as parent to wait for a child to 'exit'. */
+    int exit_code;                          /* Saved Exit Code. */
 
-	struct lock file_table_lock;            /* Lock for the file table. */
-	struct hash file_table;                 /* File table for the user process. For use, qcquire file_table_lock lock first. */
-	int nextfd;                          /* Next fd to allocate. For use, qcquire file_table_lock lock first. */
+    struct lock file_table_lock;        /* Lock for the file table. */
+    struct hash file_table;             /* File table for the user process. For use, qcquire file_table_lock lock first. */
+    int nextfd;                         /* Next fd to allocate. For use, qcquire file_table_lock lock first. */
+
+    struct file* exe_file;              /* The struct file pointer for the executable file. User process only. */
     /* LOGOS-ADDED VARIABLE END */
 #endif
 
