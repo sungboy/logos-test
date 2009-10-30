@@ -266,7 +266,6 @@ sys_exit (int status)
     sema_up (&parent->exit_sync_for_parent);
 
   /* Exit. */
-  /* TODO : Add some code if necessary. */
   thread_exit_after_removing_relation ();
   NOT_REACHED ();
 }
@@ -284,8 +283,6 @@ sys_exec (const char *file)
       sys_exit(-1);
     }
 
-  /* TODO : Implement Here Correctly. */
-  /* ... */
   return process_execute (file);
 }
 

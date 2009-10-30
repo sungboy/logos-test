@@ -112,7 +112,6 @@ inode_create (disk_sector_t sector, off_t length)
         } 
       free (disk_inode);
     }
-
   return success;
 }
 
@@ -135,6 +134,7 @@ inode_open (disk_sector_t sector)
       if (inode->sector == sector) 
         {
           inode_reopen (inode);
+		  lock_release (&inode_global_lock);
           return inode; 
         }
     }
@@ -142,7 +142,10 @@ inode_open (disk_sector_t sector)
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
   if (inode == NULL)
-    return NULL;
+    {
+      lock_release (&inode_global_lock);
+      return NULL;
+    }
 
   /* Initialize. */
   list_push_front (&open_inodes, &inode->elem);
@@ -309,7 +312,10 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   lock_acquire (&inode->inode_lock);
 
   if (inode->deny_write_cnt)
-    return 0;
+    {
+      lock_release (&inode->inode_lock);
+      return 0;
+    }
 
   while (size > 0) 
     {
