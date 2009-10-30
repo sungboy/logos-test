@@ -25,8 +25,19 @@ bool
 hash_init (struct hash *h,
            hash_hash_func *hash, hash_less_func *less, void *aux) 
 {
+  return hash_init_with_init_size(h, hash, less, aux, 4);
+}
+
+/* LOGOS-ADDED FUNCTION
+   Initializes hash table H to compute hash values using HASH and
+   compare hash elements using LESS, given auxiliary data AUX, and the given initial size. 
+   The initial size must be 2^k. */
+bool
+hash_init_with_init_size (struct hash *h,
+           hash_hash_func *hash, hash_less_func *less, void *aux, size_t size) 
+{
   h->elem_cnt = 0;
-  h->bucket_cnt = 4;
+  h->bucket_cnt = size;
   h->buckets = malloc (sizeof *h->buckets * h->bucket_cnt);
   h->hash = hash;
   h->less = less;

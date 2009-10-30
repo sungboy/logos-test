@@ -145,6 +145,9 @@ thread_init (void)
   sema_init (&initial_thread->exit_sync_for_child, 0);
   sema_init (&initial_thread->exit_sync_for_parent, 0);
   initial_thread->exit_code = -1;
+
+  /* The following code is moved because it requires a new page. */
+  // process_init_file_table(initial_thread);
 #endif
 
   // LOGOS-ADDED
@@ -170,6 +173,11 @@ thread_start (void)
   /* Start preemptive thread scheduling. */
   is_scheduling_started = true;
   intr_enable ();
+
+#ifdef USERPROG
+  /* Initialization code moved from thread_init. */
+  process_init_file_table(initial_thread);
+#endif
 
   /* Wait for the idle thread to initialize idle_thread. */
   sema_down (&idle_started);
@@ -328,6 +336,8 @@ thread_create_internal (const char *name, int priority,
   sema_init (&t->exit_sync_for_child, 0);
   sema_init (&t->exit_sync_for_parent, 0);
   t->exit_code = -1;
+
+  process_init_file_table(t);
 
   /* Build thread relation. */
   t->parent = thread_current ();
