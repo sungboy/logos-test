@@ -175,7 +175,7 @@ inode_reopen (struct inode *inode)
 
 /* Returns INODE's inode number. */
 disk_sector_t
-inode_get_inumber (const struct inode *inode)
+inode_get_inumber (struct inode *inode)
 {
   disk_sector_t ret;
 
@@ -401,7 +401,7 @@ inode_allow_write (struct inode *inode)
 
 /* Returns the length, in bytes, of INODE's data. */
 off_t
-inode_length (const struct inode *inode)
+inode_length (struct inode *inode)
 {
   off_t ret;
 

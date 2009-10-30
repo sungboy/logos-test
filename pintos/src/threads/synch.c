@@ -35,8 +35,9 @@
 /* LOGOS-ADDED VARIABLE */
 extern bool is_scheduling_started;
 
-static bool lock_release_internal (struct lock *lock);
 static bool sema_up_internal (struct semaphore *sema, bool preemptive);
+static void lock_init_internal (struct lock *lock, bool is_recursive);
+static bool lock_release_internal (struct lock *lock);
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -277,7 +278,7 @@ lock_init_as_recursive_lock (struct lock *lock)
    acquire and release it.  When these restrictions prove
    onerous, it's a good sign that a semaphore should be used,
    instead of a lock. */
-void
+static void
 lock_init_internal (struct lock *lock, bool is_recursive)
 {
   ASSERT (lock != NULL);
@@ -329,7 +330,7 @@ lock_try_acquire (struct lock *lock)
   if (lock->is_recursive && lock_held_by_current_thread (lock))
     {
       lock->acquire_count++;
-	  return;
+	  return true;
     }
   success = sema_try_down (&lock->semaphore);
   if (success)

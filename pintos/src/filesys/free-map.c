@@ -16,7 +16,7 @@ struct lock free_map_lock;
 void
 free_map_init (void) 
 {
-  lock_init (&free_map_lock);
+  lock_init_as_recursive_lock (&free_map_lock);
 
   free_map = bitmap_create (disk_size (filesys_disk));
   if (free_map == NULL)
