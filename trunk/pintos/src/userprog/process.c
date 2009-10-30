@@ -210,6 +210,9 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+  /* Destory the file table of the current process. */
+  process_destroy_file_table(cur);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -620,8 +623,8 @@ process_is_valid_user_virtual_address_for_string_read (const void *ustr)
 static unsigned
 hash_hash_file_table_struct (const struct hash_elem *element, void *aux UNUSED)
 {
-	struct file_table_struct* fts = hash_entry(element, struct file_table_struct, elem);
-	return fts->fd;
+  struct file_table_struct* fts = hash_entry (element, struct file_table_struct, elem);
+  return hash_int (fts->fd);
 }
 
 /* LOGOS-ADDED FUNCTION
@@ -629,32 +632,27 @@ hash_hash_file_table_struct (const struct hash_elem *element, void *aux UNUSED)
 static bool
 hash_less_file_table_struct (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
 {
-	struct file_table_struct* ftsa = hash_entry(a, struct file_table_struct, elem);
-	struct file_table_struct* ftsb = hash_entry(b, struct file_table_struct, elem);
+  struct file_table_struct* ftsa = hash_entry (a, struct file_table_struct, elem);
+  struct file_table_struct* ftsb = hash_entry (b, struct file_table_struct, elem);
 
-	return ftsa->fd < ftsb->fd;
+  return ftsa->fd < ftsb->fd;
 }
 
 /* LOGOS-ADDED FUNCTION
    */
-bool
-process_init_file_table(struct thread* t)
+static void
+hash_release_action_file_table_struct (struct hash_elem *element, void *aux UNUSED)
 {
-  lock_init(&t->file_table_lock);
-  t->nextfd = 3;
-
-  #define EXPTECTED_MAX_FILE_COUNT 128 /* According to pintos document, we can use 128 as max file count per process if necessary. */
-
-  /* Set initial size EXPTECTED_MAX_FILE_COUNT * 2 to ensure approximately O(1) access time for EXPTECTED_MAX_FILE_COUNT files per process.
-  Although we can't ensure O(1) access time, we can use more than EXPTECTED_MAX_FILE_COUNT files per process because the hash table using chaining is flexible enough to allow it. */
-  size_t initial_size = EXPTECTED_MAX_FILE_COUNT * 2; // Must be 2^k. 
-  return hash_init_with_init_size (&t->file_table, hash_hash_file_table_struct, hash_less_file_table_struct, t, initial_size);
+  struct file_table_struct* fts = hash_entry (element, struct file_table_struct, elem);
+  if(fts->file)
+    file_close (fts->file);
+  free(fts);
 }
 
 /* LOGOS-ADDED FUNCTION
    */
-struct file_table_struct*
-process_get_new_file_table_struct(struct thread* t, struct file* f)
+static struct file_table_struct*
+process_get_new_file_table_struct (struct thread* t, struct file* f)
 {
   int startfd;
   bool first;
@@ -665,7 +663,6 @@ process_get_new_file_table_struct(struct thread* t, struct file* f)
   if(ret == NULL)
 	  return NULL;
 
-  lock_acquire (&t->file_table_lock);
   ASSERT (t->nextfd >= 3);
 
   /* Allocate fd to use. */
@@ -677,14 +674,13 @@ process_get_new_file_table_struct(struct thread* t, struct file* f)
 	  if (!first && t->nextfd == startfd)
         {
 		  free (ret);
-          lock_release (&t->file_table_lock);
 		  return NULL;
         }
 
       temp.fd = t->nextfd;
 	  temp.file = NULL;
 	  /* If current fd is not used */
-      if (hash_find (&t->file_table, &temp) == NULL)
+      if (hash_find (&t->file_table, &temp.elem) == NULL)
         {
           ret->fd = t->nextfd;
           t->nextfd++;
@@ -702,6 +698,212 @@ process_get_new_file_table_struct(struct thread* t, struct file* f)
   /* Fill other fields in struct file_table_struct. */
   ret->file = f;
   hash_insert (&t->file_table, &ret->elem);
+
+  return ret;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+static struct file*
+process_get_file (struct thread* t, int fd)
+{
+  struct hash_elem* elem;
+  struct file_table_struct* fts;
+  struct file_table_struct temp_fts;
+
+  temp_fts.fd = fd;
+  temp_fts.file = NULL;
+
+  elem = hash_find (&t->file_table, &temp_fts.elem);
+  if(elem == NULL)
+	  return NULL;
+
+  fts = hash_entry (elem, struct file_table_struct, elem);
+
+  return fts->file;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+bool
+process_init_file_table (struct thread* t)
+{
+  lock_init(&t->file_table_lock);
+  t->nextfd = 3;
+
+  #define EXPTECTED_MAX_FILE_COUNT 128 /* According to pintos document, we can use 128 as max file count per process if necessary. */
+
+  /* Set initial size EXPTECTED_MAX_FILE_COUNT * 2 to ensure approximately O(1) access time for EXPTECTED_MAX_FILE_COUNT files per process.
+  Although we can't ensure O(1) access time, we can use more than EXPTECTED_MAX_FILE_COUNT files per process because the hash table using chaining is flexible enough to allow it. */
+  size_t initial_size = EXPTECTED_MAX_FILE_COUNT * 2; // Must be 2^k. 
+  return hash_init_with_init_size (&t->file_table, hash_hash_file_table_struct, hash_less_file_table_struct, t, initial_size);
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+void
+process_destroy_file_table(struct thread* t)
+{
+  lock_acquire (&t->file_table_lock);
+  hash_destroy (&t->file_table, hash_release_action_file_table_struct);
+  lock_release (&t->file_table_lock);
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+int 
+process_open_file(struct thread* t, const char* file_name)
+{
+  struct file_table_struct* fts;
+  struct file * f;
+  int ret;
+  
+  f = filesys_open (file_name);
+  if (f == NULL)
+    return -1;
+
+  lock_acquire (&t->file_table_lock);
+  fts = process_get_new_file_table_struct (t, f);
+  if (fts == NULL)
+    {
+      lock_release (&t->file_table_lock);
+      file_close (f);
+	  return -1;
+    }
+
+  ret = fts->fd;
+  lock_release (&t->file_table_lock);
+
+  return ret;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+int
+process_read_file(struct thread* t, int fd, void *buffer, unsigned size)
+{
+  struct file* f;
+  int ret;
+
+  lock_acquire (&t->file_table_lock);
+
+  f = process_get_file (t, fd);
+  if(f == NULL)
+    {
+      lock_release (&t->file_table_lock);
+      return -1;
+    }
+  ret = file_read (f, buffer, size);
+
+  lock_release (&t->file_table_lock);
+
+  return ret;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+int
+process_write_file(struct thread* t, int fd, const void *buffer, unsigned size)
+{
+  struct file* f;
+  int ret;
+
+  lock_acquire (&t->file_table_lock);
+
+  f = process_get_file (t, fd);
+  if(f == NULL)
+    {
+      lock_release (&t->file_table_lock);
+      return -1;
+    }
+  ret = file_write (f, buffer, size);
+
+  lock_release (&t->file_table_lock);
+
+  return ret;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+bool
+process_close_file(struct thread* t, int fd)
+{
+  struct hash_elem* temp_elem;
+  struct file_table_struct temp_fts;
+
+  temp_fts.fd = fd;
+  temp_fts.file = NULL;
+
+  lock_acquire (&t->file_table_lock);
+
+  temp_elem = hash_find (&t->file_table, &temp_fts.elem);
+  if(temp_elem == NULL)
+	  return false;
+
+  hash_delete (&t->file_table, temp_elem);
+  hash_release_action_file_table_struct (temp_elem, NULL);
+  lock_release (&t->file_table_lock);
+
+  return true;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+int process_get_filesize(struct thread* t, int fd)
+{
+  struct file* f;
+  int ret;
+
+  lock_acquire (&t->file_table_lock);
+
+  f = process_get_file (t, fd);
+  if(f == NULL)
+    {
+      lock_release (&t->file_table_lock);
+      return -1;
+    }
+  ret = file_length (f);
+
+  lock_release (&t->file_table_lock);
+
+  return ret;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+void process_seek_file(struct thread* t, int fd, unsigned position)
+{
+  struct file* f;
+
+  lock_acquire (&t->file_table_lock);
+
+  f = process_get_file (t, fd);
+  if(f == NULL)
+    {
+      lock_release (&t->file_table_lock);
+      return;
+    }
+  file_seek (f, position);
+
+  lock_release (&t->file_table_lock);
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+unsigned process_tell_file(struct thread* t, int fd)
+{
+  struct file* f;
+  unsigned ret;
+
+  lock_acquire (&t->file_table_lock);
+
+  f = process_get_file (t, fd);
+  if(f == NULL)
+    {
+      lock_release (&t->file_table_lock);
+      return 0;
+    }
+  ret = file_tell (f);
 
   lock_release (&t->file_table_lock);
 
