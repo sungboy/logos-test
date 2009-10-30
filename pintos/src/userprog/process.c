@@ -59,7 +59,7 @@ execute_thread (void *file_name_)
 
   /* LOGOS-ADDED parsing arguments */
 #define MAX_ARGS 64
-#define MAX_ARG_LEN 8
+#define MAX_ARG_LEN 30
   char argv[MAX_ARGS][MAX_ARG_LEN];
   int argc = 0;
 

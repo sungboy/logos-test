@@ -32,6 +32,12 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+/* LOGOS-ADDED VARIABLE */
+extern bool is_scheduling_started;
+
+static bool lock_release_internal (struct lock *lock);
+static bool sema_up_internal (struct semaphore *sema, bool preemptive);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -101,12 +107,45 @@ sema_try_down (struct semaphore *sema)
   return success;
 }
 
-/* Up or "V" operation on a semaphore.  Increments SEMA's value
+/* Up or "V" operation on a semaphore. Increments SEMA's value
+   and wakes up threads of those waiting for SEMA, if any.
+
+   To ensure backward compatibility, This function cannot be called with interrupt disable. */
+void
+sema_up (struct semaphore *sema) 
+{
+  ASSERT (!is_scheduling_started || intr_get_level () == INTR_ON || intr_context());
+  sema_up_internal (sema, true);
+}
+
+/* LOGOS-ADDED FUNCTION
+   Up or "V" operation on a semaphore with explicit knowledge about preemption. Increments SEMA's value
    and wakes up one thread of those waiting for SEMA, if any.
 
    This function may be called from an interrupt handler. */
 void
-sema_up (struct semaphore *sema) 
+sema_up_with_preemption (struct semaphore *sema) 
+{
+  sema_up_internal (sema, true);
+}
+
+/* LOGOS-ADDED FUNCTION
+   Up or "V" operation on a semaphore without preemption. Increments SEMA's value
+   and wakes up one thread of those waiting for SEMA, if any.
+
+   This function may be called from an interrupt handler. */
+bool
+sema_up_without_preemption (struct semaphore *sema) 
+{
+  return sema_up_internal (sema, false);
+}
+
+/* LOGOS-ADDED FUNCTION
+   Internal function. Up or "V" operation on a semaphore. Increments SEMA's value
+   and wakes up one thread of those waiting for SEMA, if any. Preempt if necessary.
+*/
+static bool
+sema_up_internal (struct semaphore *sema, bool preemptive) 
 {
   enum intr_level old_level;
   bool schedule_required = false;
@@ -130,7 +169,7 @@ sema_up (struct semaphore *sema)
 		if(thread_get_priority() < t->priority)
           schedule_required = true;
 	  }
-	if (schedule_required)
+	if (is_scheduling_started && preemptive && schedule_required)
       {
         if (intr_context())
           intr_yield_on_return ();
@@ -140,6 +179,7 @@ sema_up (struct semaphore *sema)
   }
   intr_set_level (old_level);
 
+  return is_scheduling_started;
 }
 
 static void sema_test_helper (void *sema_);
@@ -308,15 +348,55 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock) 
 {
+  if (lock_release_internal(lock))
+    sema_up (&lock->semaphore);
+}
+
+/* LOGOS-ADDED FUNCTION
+   Releases LOCK with explicit knowledge about preemption, which must be owned by the current thread.
+
+   An interrupt handler cannot acquire a lock, so it does not
+   make sense to try to release a lock within an interrupt
+   handler. */
+void
+lock_release_with_preemption (struct lock *lock) 
+{
+  if (lock_release_internal(lock))
+    sema_up_with_preemption (&lock->semaphore);
+}
+
+/* LOGOS-ADDED FUNCTION
+   Releases LOCK without preemption, which must be owned by the current thread.
+
+   An interrupt handler cannot acquire a lock, so it does not
+   make sense to try to release a lock within an interrupt
+   handler. */
+bool
+lock_release_without_preemption (struct lock *lock) 
+{
+  if (lock_release_internal(lock))
+    return sema_up_without_preemption (&lock->semaphore);
+  return false;
+}
+
+/* LOGOS-ADDED FUNCTION
+   Releases LOCK, which must be owned by the current thread.
+
+   An interrupt handler cannot acquire a lock, so it does not
+   make sense to try to release a lock within an interrupt
+   handler. */
+static bool
+lock_release_internal (struct lock *lock) 
+{
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
   lock->acquire_count--;
   if(lock->acquire_count > 0)
-    return;
+    return false;
 
   lock->holder = NULL;
-  sema_up (&lock->semaphore);
+  return true;
 }
 
 /* Returns true if the current thread holds LOCK, false
