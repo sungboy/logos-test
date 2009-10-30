@@ -178,9 +178,9 @@ sema_test_helper (void *sema_)
       sema_up (&sema[1]);
     }
 }
-
+
 /* Initializes LOCK.  A lock can be held by at most a single
-   thread at any given time.  Our locks are not "recursive", that
+   thread at any given time.  Our locks initialized by this function are not "recursive", that
    is, it is an error for the thread currently holding a lock to
    try to acquire that lock.
 
@@ -197,15 +197,57 @@ sema_test_helper (void *sema_)
 void
 lock_init (struct lock *lock)
 {
+  lock_init_internal (lock, false);
+}
+
+/* Initializes LOCK.  A lock can be held by at most a single
+   thread at any given time.  Our locks initialized by this function are "recursive", that
+   is, it is possible for the thread currently holding a lock to
+   acquire that lock again without waiting infinitely.
+
+   A lock is a specialization of a semaphore with an initial
+   value of 1.  The difference between a lock and such a
+   semaphore is twofold.  First, a semaphore can have a value
+   greater than 1, but a lock can only be owned by a single
+   thread at a time.  Second, a semaphore does not have an owner,
+   meaning that one thread can "down" the semaphore and then
+   another one "up" it, but with a lock the same thread must both
+   acquire and release it.  When these restrictions prove
+   onerous, it's a good sign that a semaphore should be used,
+   instead of a lock. */
+void
+lock_init_as_recursive_lock (struct lock *lock)
+{
+  lock_init_internal (lock, true);
+}
+
+
+/* Initializes LOCK.  A lock can be held by at most a single
+   thread at any given time. 
+
+   A lock is a specialization of a semaphore with an initial
+   value of 1.  The difference between a lock and such a
+   semaphore is twofold.  First, a semaphore can have a value
+   greater than 1, but a lock can only be owned by a single
+   thread at a time.  Second, a semaphore does not have an owner,
+   meaning that one thread can "down" the semaphore and then
+   another one "up" it, but with a lock the same thread must both
+   acquire and release it.  When these restrictions prove
+   onerous, it's a good sign that a semaphore should be used,
+   instead of a lock. */
+void
+lock_init_internal (struct lock *lock, bool is_recursive)
+{
   ASSERT (lock != NULL);
 
+  lock->is_recursive = is_recursive;
+  lock->acquire_count = 0;
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
-   necessary.  The lock must not already be held by the current
-   thread.
+   necessary. 
 
    This function may sleep, so it must not be called within an
    interrupt handler.  This function may be called with
@@ -216,10 +258,16 @@ lock_acquire (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
-  ASSERT (!lock_held_by_current_thread (lock));
+  ASSERT (!lock_held_by_current_thread (lock) || lock->is_recursive);
 
+  if (lock->is_recursive && lock_held_by_current_thread (lock))
+    {
+      lock->acquire_count++;
+	  return;
+    }
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+  lock->acquire_count++;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -234,11 +282,19 @@ lock_try_acquire (struct lock *lock)
   bool success;
 
   ASSERT (lock != NULL);
-  ASSERT (!lock_held_by_current_thread (lock));
+  ASSERT (!lock_held_by_current_thread (lock) || lock->is_recursive);
 
+  if (lock->is_recursive && lock_held_by_current_thread (lock))
+    {
+      lock->acquire_count++;
+	  return;
+    }
   success = sema_try_down (&lock->semaphore);
   if (success)
-    lock->holder = thread_current ();
+    {
+      lock->holder = thread_current ();
+      lock->acquire_count++;
+    }
   return success;
 }
 
@@ -252,6 +308,10 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+
+  lock->acquire_count--;
+  if(lock->acquire_count > 0)
+    return;
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);

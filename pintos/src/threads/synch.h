@@ -20,11 +20,14 @@ void sema_self_test (void);
 /* Lock. */
 struct lock 
   {
-    struct thread *holder;      /* Thread holding lock (for debugging). */
+    bool is_recursive;          /* Whether this lock is recursive or not. */
+	int acquire_count;          /* Recusively acquired count. */
+    struct thread *holder;      /* Thread holding lock. */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
   };
 
 void lock_init (struct lock *);
+void lock_init_as_recursive_lock (struct lock *);
 void lock_acquire (struct lock *);
 bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
