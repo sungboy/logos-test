@@ -6,6 +6,8 @@
 #include <user/syscall.h>
 #include "userprog/process.h"
 #include "devices/input.h"
+#include "threads/init.h"
+#include "filesys/filesys.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -156,17 +158,15 @@ syscall_handler (struct intr_frame *f)
 
   if (!process_is_valid_user_virtual_address (f->esp, sizeof(int), false))
     {
-      /* TODO : Add some code if necessary. */
       printf("Invalid System Call : Invalid ESP. \n");
-	  thread_exit ();
+	  sys_exit(-1);
     }
 
   syscall_num = *((uint32_t*)f->esp);
   if (syscall_num >= SYS_CALL_COUNT)
     {
-      /* TODO : Add some code if necessary. */
       printf("Invalid System Call : Invalid System Call Number. \n");
-	  thread_exit ();
+	  sys_exit(-1);
     }
 
   ASSERT (0 <= arg_no[syscall_num] && arg_no[syscall_num] <= MAX_ARG);
@@ -175,9 +175,8 @@ syscall_handler (struct intr_frame *f)
     {
 	  if (!process_is_valid_user_virtual_address (((uint32_t*)f->esp) + 1 + i, sizeof(int), false))
 	    {
-	      /* TODO : Add some code if necessary. */
           printf("Invalid System Call : Invalid Argument %d. \n", i);
-	  	  thread_exit ();
+	  	  sys_exit(-1);
 	    }
 
       arg[i] = *(((uint32_t*)f->esp) + 1 + i);
@@ -226,8 +225,6 @@ sys_halt (void)
   /* syscall0 (SYS_HALT); */
   /* NOT_REACHED (); */
 
-  /* TODO : Implement Here Correctly. */
-  /* ... */
   power_off ();
   NOT_REACHED ();
 }
@@ -242,7 +239,6 @@ sys_exit (int status)
 
   struct thread *t = thread_current ();
   struct thread *parent;
-  enum intr_level old_level;
   
   /* Termination Message */
   printf("%s: exit(%d)\n", thread_name (), status);
@@ -282,9 +278,13 @@ sys_exec (const char *file)
   /* The Relevant user code is as follows. */
   /* return (pid_t) syscall1 (SYS_EXEC, file); */
 
+  if (!process_is_valid_user_virtual_address_for_string_read (file))
+	{
+      printf("Invalid System Call(sys_exec) : Invalid File Name String Address. \n");
+      sys_exit(-1);
+    }
+
   /* TODO : Implement Here Correctly. */
-  /* ... */
-  /* check file exists(?) */
   /* ... */
   return process_execute (file);
 }
@@ -306,9 +306,13 @@ sys_create (const char *file, unsigned initial_size)
   /* The Relevant user code is as follows. */
   /* return syscall2 (SYS_CREATE, file, initial_size); */
 
-  /* TODO : Implement Here. */
-  printf("sys_create : not implemented yet. \n");
-  return false;
+  if (!process_is_valid_user_virtual_address_for_string_read (file))
+	{
+      printf("Invalid System Call(sys_create) : Invalid File Name String Address. \n");
+      sys_exit(-1);
+    }
+
+  return filesys_create (file, initial_size);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -318,9 +322,13 @@ sys_remove (const char *file)
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_REMOVE, file); */
 
-  /* TODO : Implement Here. */
-  printf("sys_remove : not implemented yet. \n");
-  return false;
+  if (!process_is_valid_user_virtual_address_for_string_read (file))
+	{
+      printf("Invalid System Call(sys_remove) : Invalid File Name String Address. \n");
+      sys_exit(-1);
+    }
+
+  return filesys_remove (file);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -330,9 +338,13 @@ sys_open (const char *file)
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_OPEN, file); */
 
-  /* TODO : Implement Here. */
-  printf("sys_open : not implemented yet. \n");
-  return -1;
+  if (!process_is_valid_user_virtual_address_for_string_read (file))
+	{
+      printf("Invalid System Call(sys_open) : Invalid File Name String Address. \n");
+      sys_exit(-1);
+    }
+
+  return process_open_file(thread_current (), file);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -342,9 +354,7 @@ sys_filesize (int fd)
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_FILESIZE, fd); */
 
-  /* TODO : Implement Here. */
-  printf("sys_filesize : not implemented yet. \n");
-  return -1;
+  return process_get_filesize(thread_current (), fd);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -358,9 +368,8 @@ sys_read (int fd, void *buffer, unsigned size)
 
   if (!process_is_valid_user_virtual_address (buffer, size, true))
 	{
-	  /* TODO : Add some code if necessary. */
-		printf("Invalid System Call(sys_read) : Invalid Buffer\n");
-      thread_exit ();
+      printf("Invalid System Call(sys_read) : Invalid Buffer. \n");
+      sys_exit (-1);
     }
 
   /* Standard Input/Output Processing */
@@ -380,10 +389,8 @@ sys_read (int fd, void *buffer, unsigned size)
 		break;
     }
 
-  /* TODO : Implement Here Correctly. */
-  /* ... */
-  printf("sys_read : not implemented yet. \n");
-  return -1;
+  /* Read file. */
+  return process_read_file(thread_current (), fd, buffer, size);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -395,9 +402,8 @@ sys_write (int fd, const void *buffer, unsigned size)
 
   if (!process_is_valid_user_virtual_address (buffer, size, false))
 	{
-	  /* TODO : Add some code if necessary. */
-      printf("Invalid System Call(sys_write) : Invalid Buffer\n");
-      thread_exit ();
+      printf("Invalid System Call(sys_write) : Invalid Buffer. \n");
+      sys_exit (-1);
     }
 
   /* Standard Input/Output Processing */
@@ -416,11 +422,8 @@ sys_write (int fd, const void *buffer, unsigned size)
 		break;
     }
 
-  /* TODO : Implement Here Correctly. */
-  /* ... */
-  printf("sys_write : not implemented yet. \n");
-
-  return -1;
+  /* Write file. */
+  return process_write_file(thread_current (), fd, buffer, size);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -430,9 +433,7 @@ sys_seek (int fd, unsigned position)
   /* The Relevant user code is as follows. */
   /* syscall2 (SYS_SEEK, fd, position); */
 
-  /* TODO : Implement Here. */
-  printf("sys_seek : not implemented yet. \n");
-  return;
+  process_seek_file (thread_current (), fd, position);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -442,9 +443,7 @@ sys_tell (int fd)
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_TELL, fd); */
 
-  /* TODO : Implement Here. */
-  printf("sys_tell : not implemented yet. \n");
-  return 0;
+  return process_tell_file (thread_current (), fd);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -454,14 +453,12 @@ sys_close (int fd)
   /* The Relevant user code is as follows. */
   /* syscall1 (SYS_CLOSE, fd); */
 
-  /* TODO : Implement Here. */
-  printf("sys_close : not implemented yet. \n");
-  return;
+  process_close_file (thread_current (), fd);
 }
 
 /* LOGOS-ADDED FUNCTION */
 static mapid_t
-sys_mmap (int fd, void *addr)
+sys_mmap (int fd UNUSED, void *addrv UNUSED)
 {
   /* The Relevant user code is as follows. */
   /* return syscall2 (SYS_MMAP, fd, addr); */
@@ -473,7 +470,7 @@ sys_mmap (int fd, void *addr)
 
 /* LOGOS-ADDED FUNCTION */
 static void
-sys_munmap (mapid_t mapid)
+sys_munmap (mapid_t mapid UNUSED)
 {
   /* The Relevant user code is as follows. */
   /* syscall1 (SYS_MUNMAP, mapid); */
@@ -485,7 +482,7 @@ sys_munmap (mapid_t mapid)
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-sys_chdir (const char *dir)
+sys_chdir (const char *dir UNUSED)
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_CHDIR, dir); */
@@ -497,7 +494,7 @@ sys_chdir (const char *dir)
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-sys_mkdir (const char *dir)
+sys_mkdir (const char *dir UNUSED)
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_MKDIR, dir); */
@@ -509,7 +506,7 @@ sys_mkdir (const char *dir)
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-sys_readdir (int fd, char name[READDIR_MAX_LEN + 1]) 
+sys_readdir (int fd UNUSED, char name[READDIR_MAX_LEN + 1] UNUSED) 
 {
   /* The Relevant user code is as follows. */
   /* return syscall2 (SYS_READDIR, fd, name); */
@@ -521,7 +518,7 @@ sys_readdir (int fd, char name[READDIR_MAX_LEN + 1])
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-sys_isdir (int fd) 
+sys_isdir (int fd UNUSED) 
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_ISDIR, fd); */
@@ -533,7 +530,7 @@ sys_isdir (int fd)
 
 /* LOGOS-ADDED FUNCTION */
 static int
-sys_inumber (int fd) 
+sys_inumber (int fd UNUSED) 
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_INUMBER, fd); */
