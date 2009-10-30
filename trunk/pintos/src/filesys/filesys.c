@@ -12,9 +12,6 @@
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
 
-/* LOGOS-ADDED VARIABLE */
-struct lock filesys_lock;
-
 static void do_format (void);
 
 /* Initializes the file system module.
@@ -22,8 +19,6 @@ static void do_format (void);
 void
 filesys_init (bool format) 
 {
-  lock_init (&filesys_lock);
-
   filesys_disk = disk_get (0, 1);
   if (filesys_disk == NULL)
     PANIC ("hd0:1 (hdb) not present, file system initialization failed");
@@ -52,8 +47,6 @@ filesys_done (void)
 bool
 filesys_create (const char *name, off_t initial_size) 
 {
-  lock_acquire (&filesys_lock);
-
   disk_sector_t inode_sector = 0;
   struct dir *dir = dir_open_root ();
   bool success = (dir != NULL
@@ -63,8 +56,6 @@ filesys_create (const char *name, off_t initial_size)
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
-
-  lock_release (&filesys_lock);
 
   return success;
 }
@@ -79,8 +70,6 @@ filesys_open (const char *name)
 {
   struct file * ret;
 
-  lock_acquire (&filesys_lock);
-
   struct dir *dir = dir_open_root ();
   struct inode *inode = NULL;
 
@@ -89,8 +78,6 @@ filesys_open (const char *name)
   dir_close (dir);
 
   ret = file_open (inode);
-
-  lock_release (&filesys_lock);
 
   return ret;
 }
@@ -105,13 +92,9 @@ filesys_remove (const char *name)
   struct dir *dir;
   bool success;
 
-  lock_acquire (&filesys_lock);
-
   dir = dir_open_root ();
   success = dir != NULL && dir_remove (dir, name);
   dir_close (dir); 
-
-  lock_release (&filesys_lock);
 
   return success;
 }
@@ -120,14 +103,10 @@ filesys_remove (const char *name)
 static void
 do_format (void)
 {
-  lock_acquire (&filesys_lock);
-
   printf ("Formatting file system...");
   free_map_create ();
   if (!dir_create (ROOT_DIR_SECTOR, 16))
     PANIC ("root directory creation failed");
   free_map_close ();
   printf ("done.\n");
-
-  lock_release (&filesys_lock);
 }
