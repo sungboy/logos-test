@@ -10,7 +10,6 @@
 static void syscall_handler (struct intr_frame *);
 
 static void sys_halt (void);
-static void sys_exit (int status);
 static pid_t sys_exec (const char *file);
 static int sys_wait (pid_t pid);
 static bool sys_create (const char *file, unsigned initial_size);
@@ -234,7 +233,7 @@ sys_halt (void)
 }
 
 /* LOGOS-ADDED FUNCTION */
-static void
+void
 sys_exit (int status)
 {
   /* The Relevant user code is as follows. */
@@ -284,6 +283,8 @@ sys_exec (const char *file)
   /* return (pid_t) syscall1 (SYS_EXEC, file); */
 
   /* TODO : Implement Here Correctly. */
+  /* ... */
+  /* check file exists(?) */
   /* ... */
   return process_execute (file);
 }
