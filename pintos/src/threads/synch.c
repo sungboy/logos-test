@@ -200,7 +200,8 @@ lock_init (struct lock *lock)
   lock_init_internal (lock, false);
 }
 
-/* Initializes LOCK.  A lock can be held by at most a single
+/* LOGOS-ADDED FUNCTION
+   Initializes LOCK.  A lock can be held by at most a single
    thread at any given time.  Our locks initialized by this function are "recursive", that
    is, it is possible for the thread currently holding a lock to
    acquire that lock again without waiting infinitely.
@@ -222,7 +223,8 @@ lock_init_as_recursive_lock (struct lock *lock)
 }
 
 
-/* Initializes LOCK.  A lock can be held by at most a single
+/* LOGOS-ADDED FUNCTION
+   Initializes LOCK.  A lock can be held by at most a single
    thread at any given time. 
 
    A lock is a specialization of a semaphore with an initial

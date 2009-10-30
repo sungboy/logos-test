@@ -405,3 +405,17 @@ inode_length (const struct inode *inode)
 
   return ret;
 }
+
+/* LOGOS-ADDED FUNCTION
+*/
+void inode_lock (struct inode *inode)
+{
+  lock_acquire (&inode->inode_lock);
+}
+
+/* LOGOS-ADDED FUNCTION
+*/
+void inode_unlock (struct inode *inode)
+{
+  lock_release (&inode->inode_lock);
+}
