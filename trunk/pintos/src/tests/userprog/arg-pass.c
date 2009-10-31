@@ -13,7 +13,7 @@ main (int argc, char *argv[])
   if (argc > 1) // 인자가 전달된 경우
   {
     msg ("argc = %d", argc);
-    for (i = 0; i <= argc; i++)
+    for (i = 0; i < argc; i++)
       if (argv[i] != NULL)
         msg ("argv[%d] = '%s' (length:%d)", i, argv[i], strlen(argv[i]));
       else
@@ -21,8 +21,8 @@ main (int argc, char *argv[])
   }
   else  // 인자가 전달되지 않은 경우, 테스트 셋 출력 
   {
-    msg ("test arg-pass many being manny 1 22 333 4444 55555 66666 77777 88888  dbl-space \"quote\"");
-    exec ("arg-pass many being manny 1 22 333 4444 55555 66666 77777 88888  dbl-space \"quote\"");
+    msg ("Let's test arg-pass ..\\userprog 1 22 333 4444 55555 666666 7777777 88888888 999999999 dbl-space lllllllllllllllllong");
+    exec ("arg-pass ..\\userprog 1 22 333 4444 55555 666666 7777777 88888888 999999999  dbl-space lllllllllllllllllong");
   }
 
   return 0;
