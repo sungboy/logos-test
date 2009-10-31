@@ -58,17 +58,19 @@ execute_thread (void *file_name_)
   bool success;
 
   /* LOGOS-ADDED parsing arguments */
-#define MAX_ARGS 64
-#define MAX_ARG_LEN 30
-  char argv[MAX_ARGS][MAX_ARG_LEN];
+
+  #define MAX_ARGS 64
+
+  char *argv[MAX_ARGS];
   int argc = 0;
 
   char *token, *save_ptr;
 
   for (token = strtok_r (file_name, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr))
   {
-    //printf( "Token %d is %s", argc, token);
-    strlcpy (argv[argc], token, MAX_ARG_LEN);
+    int len = strlen (token) + 1;
+    argv[argc] = (char*)malloc (sizeof (char) * len);
+    strlcpy (argv[argc], token, len);
     argc++;
   }  
 
@@ -86,43 +88,44 @@ execute_thread (void *file_name_)
 
   /* LOGOS-ADDED: passing arguments */
   int i;
-  void* sp = if_.esp;
-  char *argp[MAX_ARGS]; // argvÍ∞Ä ?§ÌÉù???Ä?•Îêú Ï£ºÏÜå
-  for (i = 0; i < argc; i++)
+  char *argp[MAX_ARGS];
+  char *arg;
+  for (i = 1; i <= argc; i++)
   {
-    char *arg = argv[argc-1-i];
+    arg = argv[argc - i];
     int len = strlen (arg) + 1; // 1 for null
-    sp = (char *)sp - len;
-    argp[argc-1-i] = sp;
-    strlcpy (sp, arg, len);
+    if_.esp = (char *)if_.esp - len;
+    argp[argc-1-i] = if_.esp;
+    strlcpy (if_.esp, arg, len);
   }
 
-  sp = (uint8_t*)sp - 1;  // for word-align
-  memset (sp, 0, 1);
+  if_.esp = (uint8_t*)if_.esp - 1;  // for word-align
+  memset (if_.esp, 0, 1);
 
-  sp = (char **)sp - 1; // for last null argv
-  memset (sp, 0, sizeof (char *));
+  if_.esp = (char **)if_.esp - 1; // for last null argv
+  memset (if_.esp, 0, sizeof (char *));
+
+  for (i = 1; i <= argc; i++)
+  {
+    if_.esp = (char **)if_.esp - 1;
+    *(char **)if_.esp = argp[argc - i];
+  }
+
+  char** pargv = if_.esp;
+  if_.esp = (char ***)if_.esp - 1;
+  *(char ***)if_.esp = pargv;
+
+  if_.esp = (int*)if_.esp - 1;
+  *(int *)if_.esp = argc;
+
+  if_.esp = (void **)if_.esp - 1;
+  *(void **)if_.esp = (void *)0;
 
   for (i = 0; i < argc; i++)
   {
-    sp = (char **)sp - 1;
-    *(char **)sp = argp[argc-1-i];
+    free ((void *)argv[argc]);
   }
 
-  char** pargv = sp;
-  sp = (char ***)sp - 1;
-  *(char ***)sp = pargv;
-
-  sp = (int*)sp - 1;
-  *(int *)sp = argc;
-
-  sp = (void **)sp - 1;
-  *(void **)sp = (void *)0;
-    
-
-  //hex_dump (0, if_.esp - (if_.esp - sp), if_.esp - sp, true);
-
-  if_.esp = sp; // for test using sp
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
