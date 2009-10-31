@@ -15,6 +15,7 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#include "threads/malloc.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -144,7 +145,10 @@ thread_init (void)
   initial_thread->is_user_process = false;
   initial_thread->user_process_state = PROCESS_NORMAL;
   sema_init (&initial_thread->exit_sync_for_child, 0);
-  sema_init (&initial_thread->exit_sync_for_parent, 0);
+  /* The following code is moved because it requires a new page. */
+  //initial_thread->exit_sync_for_parent = (struct semaphore*)malloc (sizeof (struct semaphore));
+  //ASSERT (initial_thread->exit_sync_for_parent != NULL);
+  //sema_init (initial_thread->exit_sync_for_parent, 0);
   initial_thread->exit_code = -1;
 
   /* The following code is moved because it requires a new page. */
@@ -179,6 +183,10 @@ thread_start (void)
 
 #ifdef USERPROG
   /* Initialization code moved from thread_init. */
+  initial_thread->exit_sync_for_parent = (struct semaphore*)malloc (sizeof (struct semaphore));
+  ASSERT (initial_thread->exit_sync_for_parent != NULL);
+  sema_init (initial_thread->exit_sync_for_parent, 0);
+
   process_init_file_table(initial_thread);
 #endif
 
@@ -337,7 +345,9 @@ thread_create_internal (const char *name, int priority,
 
   t->user_process_state = PROCESS_NORMAL;
   sema_init (&t->exit_sync_for_child, 0);
-  sema_init (&t->exit_sync_for_parent, 0);
+  t->exit_sync_for_parent = (struct semaphore*)malloc (sizeof (struct semaphore));
+  ASSERT (t->exit_sync_for_parent != NULL);
+  sema_init (t->exit_sync_for_parent, 0);
   t->exit_code = -1;
 
   process_init_file_table(t);

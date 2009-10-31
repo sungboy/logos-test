@@ -256,14 +256,14 @@ sys_exit (int status)
 
   if(parent != NULL)
     {
-      sema_up (&parent->exit_sync_for_parent);
+      sema_up (t->exit_sync_for_parent);
       sema_down (&t->exit_sync_for_child);
     }
 
   thread_remove_parent_relation(true);
 
   if(parent != NULL)
-    sema_up (&parent->exit_sync_for_parent);
+    sema_up (t->exit_sync_for_parent);
 
   /* Exit. */
   thread_exit_after_removing_relation ();
