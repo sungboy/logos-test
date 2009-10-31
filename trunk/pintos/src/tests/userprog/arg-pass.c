@@ -10,8 +10,6 @@ main (int argc, char *argv[])
 
   test_name = "arg-pass";
 
-  msg ("begin");
-
   if (argc > 1) // 인자가 전달된 경우
   {
     msg ("argc = %d", argc);
@@ -26,8 +24,6 @@ main (int argc, char *argv[])
     msg ("test arg-pass many being manny 1 22 333 4444 55555 66666 77777 88888  dbl-space \"quote\"");
     exec ("arg-pass many being manny 1 22 333 4444 55555 66666 77777 88888  dbl-space \"quote\"");
   }
-
-  msg ("end");
 
   return 0;
 }
