@@ -21,7 +21,7 @@ main (int argc, char *argv[])
   }
   else  // 인자가 전달되지 않은 경우, 테스트 셋 출력 
   {
-    msg ("Let's test arg-pass ..\\userprog 1 22 333 4444 55555 666666 7777777 88888888 999999999 dbl-space lllllllllllllllllong");
+    msg ("Let's test arg-pass ..\\userprog 1 22 333 4444 55555 666666 7777777 88888888 999999999  dbl-space lllllllllllllllllong");
     exec ("arg-pass ..\\userprog 1 22 333 4444 55555 666666 7777777 88888888 999999999  dbl-space lllllllllllllllllong");
   }
 
