@@ -154,6 +154,7 @@ process_wait (tid_t child_tid)
   struct list_elem *e, *next;
   bool found = false;
   int ret = -1;
+  struct semaphore* exit_sync_for_parent;
 
   /* Find the child. */
   lock_acquire (&thread_relation_lock);
@@ -176,10 +177,12 @@ process_wait (tid_t child_tid)
       return -1;
     }
 
+  exit_sync_for_parent = child->exit_sync_for_parent;
+
   lock_release (&thread_relation_lock);
 
   /* Wait for the child to call 'exit'. */
-  sema_down (&t->exit_sync_for_parent);
+  sema_down (exit_sync_for_parent);
 
   /* Read exit code. */
   ASSERT(child->user_process_state == PROCESS_ZOMBIE);
@@ -187,7 +190,8 @@ process_wait (tid_t child_tid)
 
   /* Wait for the child to release resource. */
   sema_up (&child->exit_sync_for_child);
-  sema_down (&t->exit_sync_for_parent);
+  sema_down (exit_sync_for_parent);
+  free(exit_sync_for_parent);
 
   /* Return. */
   return ret;

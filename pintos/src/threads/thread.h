@@ -121,8 +121,8 @@ struct thread
     bool is_user_process;                   /* Whether this thread is for user process or not. Can't be changed. */
     enum process_status user_process_state; /* User process state. For use, acquire thread_relation_lock first. */
 
-    struct semaphore exit_sync_for_child;   /* Used as child to wait for a parent to 'wait'. */
-    struct semaphore exit_sync_for_parent;  /* Used as parent to wait for a child to 'exit'. */
+    struct semaphore exit_sync_for_child;   /* Used by child to wait for a parent. */
+    struct semaphore* exit_sync_for_parent;  /* Used by parent to wait for a child. */
     int exit_code;                          /* Saved Exit Code. */
 
     struct lock file_table_lock;        /* Lock for the file table. */
