@@ -59,9 +59,7 @@ execute_thread (void *file_name_)
 
   /* LOGOS-ADDED parsing arguments */
 
-  #define MAX_ARGS 64
-
-  char *argv[MAX_ARGS];
+  char **argv = malloc (sizeof (char*));
   int argc = 0;
 
   char *token, *save_ptr;
@@ -72,6 +70,7 @@ execute_thread (void *file_name_)
     argv[argc] = (char*)malloc (sizeof (char) * len);
     strlcpy (argv[argc], token, len);
     argc++;
+    argv = (char**)realloc (argv, sizeof (char*) * (argc + 1));
   }  
 
   /* Initialize interrupt frame and load executable. */
@@ -88,14 +87,14 @@ execute_thread (void *file_name_)
 
   /* LOGOS-ADDED: passing arguments */
   int i;
-  char *argp[MAX_ARGS];
+  char **argp = malloc (sizeof (char*) * argc);
   char *arg;
   for (i = 1; i <= argc; i++)
   {
     arg = argv[argc - i];
     int len = strlen (arg) + 1; // 1 for null
     if_.esp = (char *)if_.esp - len;
-    argp[argc-1-i] = if_.esp;
+    argp[argc - i] = if_.esp;
     strlcpy (if_.esp, arg, len);
   }
 
@@ -121,10 +120,14 @@ execute_thread (void *file_name_)
   if_.esp = (void **)if_.esp - 1;
   *(void **)if_.esp = (void *)0;
 
+  free (argp);
+
   for (i = 0; i < argc; i++)
   {
-    free ((void *)argv[argc]);
+    free (argv[i]);
   }
+
+  free (argv);
 
 
   /* Start the user process by simulating a return from an
