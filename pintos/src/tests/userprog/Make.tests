@@ -3,7 +3,7 @@
 tests/%.output: FSDISK = 2
 tests/%.output: PUTFILES = $(filter-out os.dsk, $^)
 
-tests/userprog_TESTS = $(addprefix tests/userprog/,args-none		\
+tests/userprog_TESTS = $(addprefix tests/userprog/, arg-pass args-none		\
 args-single args-multiple args-many args-dbl-space sc-bad-sp		\
 sc-bad-arg sc-boundary sc-boundary-2 halt exit create-normal		\
 create-empty create-null create-bad-ptr create-long create-exists	\
@@ -20,6 +20,7 @@ bad-jump bad-jump2 self-developed)
 tests/userprog_PROGS = $(tests/userprog_TESTS) $(addprefix \
 tests/userprog/,child-simple child-args child-bad child-close child-rox)
 
+tests/userprog/arg-pass_SRC = tests/userprog/arg-pass.c
 tests/userprog/args-none_SRC = tests/userprog/args.c
 tests/userprog/args-single_SRC = tests/userprog/args.c
 tests/userprog/args-multiple_SRC = tests/userprog/args.c
