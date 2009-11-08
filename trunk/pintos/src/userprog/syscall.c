@@ -12,6 +12,7 @@
 static void syscall_handler (struct intr_frame *);
 
 static void sys_halt (void);
+static void sys_exit (int status) NO_RETURN;
 static pid_t sys_exec (const char *file);
 static int sys_wait (pid_t pid);
 static bool sys_create (const char *file, unsigned initial_size);
@@ -159,14 +160,14 @@ syscall_handler (struct intr_frame *f)
   if (!process_is_valid_user_virtual_address (f->esp, sizeof(int), false))
     {
       printf("Invalid System Call : Invalid ESP. \n");
-	  sys_exit(-1);
+	  thread_exit_with_exit_code (-1);
     }
 
   syscall_num = *((uint32_t*)f->esp);
   if (syscall_num >= SYS_CALL_COUNT)
     {
       printf("Invalid System Call : Invalid System Call Number. \n");
-	  sys_exit(-1);
+	  thread_exit_with_exit_code (-1);
     }
 
   ASSERT (0 <= arg_no[syscall_num] && arg_no[syscall_num] <= MAX_ARG);
@@ -176,7 +177,7 @@ syscall_handler (struct intr_frame *f)
 	  if (!process_is_valid_user_virtual_address (((uint32_t*)f->esp) + 1 + i, sizeof(int), false))
 	    {
           printf("Invalid System Call : Invalid Argument %d. \n", i);
-	  	  sys_exit(-1);
+	  	  thread_exit_with_exit_code (-1);
 	    }
 
       arg[i] = *(((uint32_t*)f->esp) + 1 + i);
@@ -230,43 +231,15 @@ sys_halt (void)
 }
 
 /* LOGOS-ADDED FUNCTION */
-void
+static void
 sys_exit (int status)
 {
   /* The Relevant user code is as follows. */
   /* syscall1 (SYS_EXIT, status); */
   /* NOT_REACHED (); */
 
-  struct thread *t = thread_current ();
-  struct thread *parent;
-  
-  /* Termination Message */
-  printf("%s: exit(%d)\n", thread_name (), status);
-
-  /* Move children. */
-  thread_remove_child_relation (true);
-
-  /* Set exit code, interact with parent, and release. */
-  t->exit_code = status;
-
-  lock_acquire (&thread_relation_lock);
-  t->user_process_state = PROCESS_ZOMBIE;
-  parent = t->parent;
-  lock_release (&thread_relation_lock);
-
-  if(parent != NULL)
-    {
-      sema_up (t->exit_sync_for_parent);
-      sema_down (&t->exit_sync_for_child);
-    }
-
-  thread_remove_parent_relation(true);
-
-  if(parent != NULL)
-    sema_up (t->exit_sync_for_parent);
-
   /* Exit. */
-  thread_exit_after_removing_relation ();
+  thread_exit_with_exit_code (status);
   NOT_REACHED ();
 }
 
@@ -280,7 +253,7 @@ sys_exec (const char *file)
   if (!process_is_valid_user_virtual_address_for_string_read (file))
 	{
       printf("Invalid System Call(sys_exec) : Invalid File Name String Address. \n");
-      sys_exit(-1);
+      thread_exit_with_exit_code (-1);
     }
 
   return process_execute (file);
@@ -306,7 +279,7 @@ sys_create (const char *file, unsigned initial_size)
   if (!process_is_valid_user_virtual_address_for_string_read (file))
 	{
       printf("Invalid System Call(sys_create) : Invalid File Name String Address. \n");
-      sys_exit(-1);
+      thread_exit_with_exit_code (-1);
     }
 
   return filesys_create (file, initial_size);
@@ -322,7 +295,7 @@ sys_remove (const char *file)
   if (!process_is_valid_user_virtual_address_for_string_read (file))
 	{
       printf("Invalid System Call(sys_remove) : Invalid File Name String Address. \n");
-      sys_exit(-1);
+      thread_exit_with_exit_code (-1);
     }
 
   return filesys_remove (file);
@@ -338,7 +311,7 @@ sys_open (const char *file)
   if (!process_is_valid_user_virtual_address_for_string_read (file))
 	{
       printf("Invalid System Call(sys_open) : Invalid File Name String Address. \n");
-      sys_exit(-1);
+      thread_exit_with_exit_code (-1);
     }
 
   return process_open_file(thread_current (), file);
@@ -361,20 +334,20 @@ sys_read (int fd, void *buffer, unsigned size)
   /* The Relevant user code is as follows. */
   /* return syscall3 (SYS_READ, fd, buffer, size); */
 
-  int i;
+  unsigned ui;
 
   if (!process_is_valid_user_virtual_address (buffer, size, true))
 	{
       printf("Invalid System Call(sys_read) : Invalid Buffer. \n");
-      sys_exit (-1);
+      thread_exit_with_exit_code (-1);
     }
 
   /* Standard Input/Output Processing */
   switch(fd)
     {
     case STDIN_FILENO:
-        for (i=0; i<size; i++)
-          ((uint8_t*)buffer)[i] = input_getc ();
+        for (ui=0; ui<size; ui++)
+          ((uint8_t*)buffer)[ui] = input_getc ();
         return size;
     case STDOUT_FILENO:
 		/* Do Nothing. */
@@ -400,7 +373,7 @@ sys_write (int fd, const void *buffer, unsigned size)
   if (!process_is_valid_user_virtual_address (buffer, size, false))
 	{
       printf("Invalid System Call(sys_write) : Invalid Buffer. \n");
-      sys_exit (-1);
+      thread_exit_with_exit_code (-1);
     }
 
   /* Standard Input/Output Processing */

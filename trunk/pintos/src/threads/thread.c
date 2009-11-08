@@ -199,7 +199,7 @@ static bool
 is_thread_time_slice_expired (void)
 {
   struct thread *t = thread_current ();
-  if (t->remained_ticks && thread_ticks >= t->remained_ticks)
+  if (t->remained_ticks && ((int)thread_ticks) >= t->remained_ticks)
 	return true;
  
   if (thread_ticks >= thread_get_time_slice())
@@ -475,29 +475,26 @@ thread_tid (void)
   return thread_current ()->tid;
 }
 
-/* Deschedules the current thread and destroys it.  Never
-   returns to the caller. */
+/* Deschedules the current thread and destroys it without exit code for kernel threads or user processes killed by kernel. 
+   Never returns to the caller. */
 void
 thread_exit (void) 
 {
-#ifdef USERPROG
-  thread_remove_relation (true);
-#endif
-  thread_exit_after_removing_relation ();
+  thread_exit_with_exit_code (-1); // -1 means that the current thread is being killed by kernel. 
   NOT_REACHED ();
 }
 
 /* LOGOS-ADDED FUNCTION
-   Deschedules the current thread and destroys it after removing relation.  Never
-   returns to the caller. */
+   Deschedules the current thread and destroys it with exit code. The exit code is only valid with user processes. 
+   Never returns to the caller. */
 void
-thread_exit_after_removing_relation (void) 
+thread_exit_with_exit_code (int status) 
 {
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
   /* For User Process */
-  process_exit ();
+  process_exit (status);
 #endif
 
   /* Just set our status to dying and schedule another process.
