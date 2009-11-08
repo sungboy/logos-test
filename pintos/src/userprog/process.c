@@ -83,7 +83,7 @@ execute_thread (void *file_name_)
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
-    sys_exit (-1);
+    thread_exit ();
 
   /* LOGOS-ADDED: passing arguments */
   int i;
@@ -199,10 +199,41 @@ process_wait (tid_t child_tid)
 
 /* Free the current process's resources. */
 void
-process_exit (void)
+process_exit (int status)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  struct thread *parent;
+  
+  if(cur->is_user_process)
+    {
+      /* Termination Message */
+      printf("%s: exit(%d)\n", thread_name (), status);
+
+      /* Move children. */
+      thread_remove_child_relation (true);
+
+      /* Set exit code, interact with parent, and release. */
+      cur->exit_code = status;
+
+      lock_acquire (&thread_relation_lock);
+      cur->user_process_state = PROCESS_ZOMBIE;
+      parent = cur->parent;
+      lock_release (&thread_relation_lock);
+
+      if(parent != NULL)
+        {
+          sema_up (cur->exit_sync_for_parent);
+          sema_down (&cur->exit_sync_for_child);
+        }
+
+      thread_remove_parent_relation(true);
+
+      if(parent != NULL)
+        sema_up (cur->exit_sync_for_parent);
+    }
+  else
+    thread_remove_relation (true);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -590,7 +621,7 @@ process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool wri
   void *upage, *upagec;
   uintptr_t pg_count;
   struct thread *t;
-  int i;
+  uintptr_t ui;
   uint32_t *pd;
 
   if (!is_user_vaddr (uvaddr))
@@ -602,9 +633,9 @@ process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool wri
   t = thread_current ();
   pd = t->pagedir;
 
-  for (i=0; i<pg_count; i++)
+  for (ui=0; ui<pg_count; ui++)
     {
-	  upagec = upage + (i << PGBITS);
+	  upagec = upage + (ui << PGBITS);
 	  if (writable)
         {
           if (!pagedir_is_writable (pd, upagec))
@@ -858,7 +889,10 @@ process_close_file(struct thread* t, int fd)
 
   temp_elem = hash_find (&t->file_table, &temp_fts.elem);
   if(temp_elem == NULL)
-	  return false;
+    {
+      lock_release (&t->file_table_lock);
+      return false;
+    }
 
   hash_delete (&t->file_table, temp_elem);
   hash_release_action_file_table_struct (temp_elem, NULL);

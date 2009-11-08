@@ -164,7 +164,7 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 #ifdef USERPROG
-void thread_exit_after_removing_relation (void) NO_RETURN;
+void thread_exit_with_exit_code (int status) NO_RETURN;
 void thread_remove_relation (bool lock);
 void thread_remove_child_relation (bool lock);
 void thread_remove_parent_relation (bool lock);
