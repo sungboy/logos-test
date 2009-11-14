@@ -5,29 +5,49 @@
 #include "threads/init.h"
 #include "threads/pte.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 
 static uint32_t *active_pd (void);
-static void invalidate_pagedir (uint32_t *);
+static void invalidate_pagedir (pagedir_t);
 
 /* Creates a new page directory that has mappings for kernel
    virtual addresses, but none for user virtual addresses.
    Returns the new page directory, or a null pointer if memory
    allocation fails. */
-uint32_t *
+pagedir_t
 pagedir_create (void) 
 {
+#ifdef VM
+  pagedir_t epd;
+#endif
   uint32_t *pd = palloc_get_page (0);
   if (pd != NULL)
     memcpy (pd, base_page_dir, PGSIZE);
+
+#ifdef VM
+  epd = (pagedir_t)malloc (sizeof (struct pagedir));
+  epd->pd = pd;
+
+  return epd;
+#else
   return pd;
+#endif
 }
 
 /* Destroys page directory PD, freeing all the pages it
    references. */
 void
-pagedir_destroy (uint32_t *pd) 
+pagedir_destroy (pagedir_t epd) 
 {
   uint32_t *pde;
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
 
   if (pd == NULL)
     return;
@@ -45,6 +65,9 @@ pagedir_destroy (uint32_t *pd)
         palloc_free_page (pt);
       }
   palloc_free_page (pd);
+#ifdef VM
+  free (epd);
+#endif
 }
 
 /* Returns the address of the page table entry for virtual
@@ -96,9 +119,17 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
    Returns true if successful, false if memory allocation
    failed. */
 bool
-pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
+pagedir_set_page (pagedir_t epd, void *upage, void *kpage, bool writable)
 {
   uint32_t *pte;
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
 
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (pg_ofs (kpage) == 0);
@@ -123,9 +154,17 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
    corresponding to that physical address, or a null pointer if
    UADDR is unmapped. */
 void *
-pagedir_get_page (uint32_t *pd, const void *uaddr) 
+pagedir_get_page (pagedir_t epd, const void *uaddr) 
 {
   uint32_t *pte;
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
 
   ASSERT (is_user_vaddr (uaddr));
   
@@ -141,9 +180,17 @@ pagedir_get_page (uint32_t *pd, const void *uaddr)
    bits in the page table entry are preserved.
    UPAGE need not be mapped. */
 void
-pagedir_clear_page (uint32_t *pd, void *upage) 
+pagedir_clear_page (pagedir_t epd, void *upage) 
 {
   uint32_t *pte;
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
 
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (is_user_vaddr (upage));
@@ -152,7 +199,7 @@ pagedir_clear_page (uint32_t *pd, void *upage)
   if (pte != NULL && (*pte & PTE_P) != 0)
     {
       *pte &= ~PTE_P;
-      invalidate_pagedir (pd);
+      invalidate_pagedir (epd);
     }
 }
 
@@ -161,18 +208,38 @@ pagedir_clear_page (uint32_t *pd, void *upage)
    installed.
    Returns false if PD contains no PTE for VPAGE. */
 bool
-pagedir_is_dirty (uint32_t *pd, const void *vpage) 
+pagedir_is_dirty (pagedir_t epd, const void *vpage) 
 {
-  uint32_t *pte = lookup_page (pd, vpage, false);
+  uint32_t *pte;
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
+
+  pte = lookup_page (pd, vpage, false);
   return pte != NULL && (*pte & PTE_D) != 0;
 }
 
 /* Set the dirty bit to DIRTY in the PTE for virtual page VPAGE
    in PD. */
 void
-pagedir_set_dirty (uint32_t *pd, const void *vpage, bool dirty) 
+pagedir_set_dirty (pagedir_t epd, const void *vpage, bool dirty) 
 {
-  uint32_t *pte = lookup_page (pd, vpage, false);
+  uint32_t *pte;
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
+
+  pte = lookup_page (pd, vpage, false);
   if (pte != NULL) 
     {
       if (dirty)
@@ -180,7 +247,7 @@ pagedir_set_dirty (uint32_t *pd, const void *vpage, bool dirty)
       else 
         {
           *pte &= ~(uint32_t) PTE_D;
-          invalidate_pagedir (pd);
+          invalidate_pagedir (epd);
         }
     }
 }
@@ -190,18 +257,38 @@ pagedir_set_dirty (uint32_t *pd, const void *vpage, bool dirty)
    installed and the last time it was cleared.  Returns false if
    PD contains no PTE for VPAGE. */
 bool
-pagedir_is_accessed (uint32_t *pd, const void *vpage) 
+pagedir_is_accessed (pagedir_t epd, const void *vpage) 
 {
-  uint32_t *pte = lookup_page (pd, vpage, false);
+  uint32_t *pte;
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
+
+  pte = lookup_page (pd, vpage, false);
   return pte != NULL && (*pte & PTE_A) != 0;
 }
 
 /* Sets the accessed bit to ACCESSED in the PTE for virtual page
    VPAGE in PD. */
 void
-pagedir_set_accessed (uint32_t *pd, const void *vpage, bool accessed) 
+pagedir_set_accessed (pagedir_t epd, const void *vpage, bool accessed) 
 {
-  uint32_t *pte = lookup_page (pd, vpage, false);
+  uint32_t *pte;
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
+
+  pte = lookup_page (pd, vpage, false);
   if (pte != NULL) 
     {
       if (accessed)
@@ -209,7 +296,7 @@ pagedir_set_accessed (uint32_t *pd, const void *vpage, bool accessed)
       else 
         {
           *pte &= ~(uint32_t) PTE_A; 
-          invalidate_pagedir (pd);
+          invalidate_pagedir (epd);
         }
     }
 }
@@ -217,8 +304,18 @@ pagedir_set_accessed (uint32_t *pd, const void *vpage, bool accessed)
 /* Loads page directory PD into the CPU's page directory base
    register. */
 void
-pagedir_activate (uint32_t *pd) 
+pagedir_activate (pagedir_t epd) 
 {
+  uint32_t *pd;
+#ifdef VM
+  if(epd == NULL)
+    pd = NULL;
+  else
+    pd = epd->pd;
+#else
+  pd = epd;
+#endif
+
   if (pd == NULL)
     pd = base_page_dir;
 
@@ -252,22 +349,39 @@ active_pd (void)
    directory.  (If PD is not active then its entries are not in
    the TLB, so there is no need to invalidate anything.) */
 static void
-invalidate_pagedir (uint32_t *pd) 
+invalidate_pagedir (pagedir_t epd) 
 {
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
+
   if (active_pd () == pd) 
     {
       /* Re-activating PD clears the TLB.  See [IA32-v3a] 3.12
          "Translation Lookaside Buffers (TLBs)". */
-      pagedir_activate (pd);
+      pagedir_activate (epd);
     } 
 }
 
 /* LOGOS-ADDED FUNCTION
    Looks up the page and check whether the page is readable. */
 bool
-pagedir_is_readable (uint32_t *pd, const void *uaddr)
+pagedir_is_readable (pagedir_t epd, const void *uaddr)
 {
   uint32_t *pte;
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
 
   ASSERT (is_user_vaddr (uaddr));
   
@@ -282,9 +396,17 @@ pagedir_is_readable (uint32_t *pd, const void *uaddr)
 /* LOGOS-ADDED FUNCTION
    Looks up the page and check whether the page is writable. */
 bool
-pagedir_is_writable (uint32_t *pd, const void *uaddr)
+pagedir_is_writable (pagedir_t epd, const void *uaddr)
 {
   uint32_t *pte;
+  uint32_t *pd;
+#ifdef VM
+  ASSERT (epd != NULL);
+
+  pd = epd->pd;
+#else
+  pd = epd;
+#endif
 
   ASSERT (is_user_vaddr (uaddr));
   

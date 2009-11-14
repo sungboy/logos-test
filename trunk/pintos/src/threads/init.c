@@ -34,6 +34,9 @@
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
+//#ifdef VM
+#include "vm/vm.h"
+//#endif
 
 /* Amount of physical memory, in 4 kB pages. */
 size_t ram_pages;
@@ -188,6 +191,10 @@ paging_init (void)
      to/from Control Registers" and [IA32-v3a] 3.7.5 "Base Address
      of the Page Directory". */
   asm volatile ("movl %0, %%cr3" : : "r" (vtop (base_page_dir)));
+
+#ifdef VM
+  vm_init ();
+#endif
 }
 
 /* Breaks the kernel command line into words and returns them as

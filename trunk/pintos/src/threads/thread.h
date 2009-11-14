@@ -4,6 +4,9 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#ifdef USERPROG
+#include "userprog/pagedir.h"
+#endif
 #include "synch.h"
 #include <kernel/hash.h>
 
@@ -116,7 +119,7 @@ struct thread
     /* LOGOS-ADDED VARIABLE END */
 
 	/* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
+    pagedir_t pagedir;                  /* Page directory. */
 	/* LOGOS-ADDED VARIABLE START */
     bool is_user_process;                   /* Whether this thread is for user process or not. Can't be changed. */
     enum process_status user_process_state; /* User process state. For use, acquire thread_relation_lock first. */

@@ -3,19 +3,33 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#ifdef VM
+#include "vm/vm-sup-page-table.h"
+#endif
 
-uint32_t *pagedir_create (void);
-void pagedir_destroy (uint32_t *pd);
-bool pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool rw);
-void *pagedir_get_page (uint32_t *pd, const void *uaddr);
-void pagedir_clear_page (uint32_t *pd, void *upage);
-bool pagedir_is_dirty (uint32_t *pd, const void *upage);
-void pagedir_set_dirty (uint32_t *pd, const void *upage, bool dirty);
-bool pagedir_is_accessed (uint32_t *pd, const void *upage);
-void pagedir_set_accessed (uint32_t *pd, const void *upage, bool accessed);
-void pagedir_activate (uint32_t *pd);
+#ifdef VM
+struct pagedir
+{
+  uint32_t * pd;
+  struct hash spd;
+};
+typedef struct pagedir *pagedir_t;
+#else
+typedef uint32_t *pagedir_t;
+#endif
 
-bool pagedir_is_readable (uint32_t *pd, const void *uaddr);
-bool pagedir_is_writable (uint32_t *pd, const void *uaddr);
+pagedir_t pagedir_create (void);
+void pagedir_destroy (pagedir_t epd);
+bool pagedir_set_page (pagedir_t epd, void *upage, void *kpage, bool rw);
+void *pagedir_get_page (pagedir_t epd, const void *uaddr);
+void pagedir_clear_page (pagedir_t epd, void *upage);
+bool pagedir_is_dirty (pagedir_t epd, const void *upage);
+void pagedir_set_dirty (pagedir_t epd, const void *upage, bool dirty);
+bool pagedir_is_accessed (pagedir_t epd, const void *upage);
+void pagedir_set_accessed (pagedir_t epd, const void *upage, bool accessed);
+void pagedir_activate (pagedir_t epd);
+
+bool pagedir_is_readable (pagedir_t epd, const void *uaddr);
+bool pagedir_is_writable (pagedir_t epd, const void *uaddr);
 
 #endif /* userprog/pagedir.h */
