@@ -20,6 +20,9 @@
 #include "userprog/syscall.h"
 #include <kernel/hash.h>
 #include "threads/malloc.h"
+#ifdef VM
+#include "vm/vm.h"
+#endif //VM
 
 static thread_func execute_thread NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -202,7 +205,7 @@ void
 process_exit (int status)
 {
   struct thread *cur = thread_current ();
-  uint32_t *pd;
+  pagedir_t pd;
   struct thread *parent;
   
   if(cur->is_user_process)
@@ -234,6 +237,11 @@ process_exit (int status)
     }
   else
     thread_remove_relation (true);
+
+#ifdef VM
+  /* Free all user memory. */
+  vm_free_all_thread_user_memory (cur);
+#endif //VM
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -609,8 +617,25 @@ install_page (void *upage, void *kpage, bool writable)
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable));
+  if (pagedir_get_page (t->pagedir, upage) != NULL)
+    {
+      ASSERT (0);
+      return false;
+    }
+
+  if (!pagedir_set_page (t->pagedir, upage, kpage, writable))
+    return false;
+
+#ifdef VM
+  /* Make the page pageable. */
+  if (!vm_set_page_pageable (t, upage))
+    {
+      pagedir_clear_page (t->pagedir, upage);
+      return false;
+    }
+#endif
+
+  return true;      
 }
 
 /* LOGOS-ADDED FUNCTION
@@ -622,7 +647,7 @@ process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool wri
   uintptr_t pg_count;
   struct thread *t;
   uintptr_t ui;
-  uint32_t *pd;
+  pagedir_t pd;
 
   if (!is_user_vaddr (uvaddr))
     return false;
