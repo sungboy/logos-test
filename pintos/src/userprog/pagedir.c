@@ -21,12 +21,24 @@ pagedir_create (void)
   pagedir_t epd;
 #endif
   uint32_t *pd = palloc_get_page (0);
-  if (pd != NULL)
-    memcpy (pd, base_page_dir, PGSIZE);
+  if (pd == NULL)
+    return NULL;
+  memcpy (pd, base_page_dir, PGSIZE);
 
 #ifdef VM
   epd = (pagedir_t)malloc (sizeof (struct pagedir));
+  if (epd == NULL)
+    {
+      palloc_free_page (pd);
+	  return NULL;
+    }
   epd->pd = pd;
+  if (!vm_init_sup_page_table (&epd->spd))
+    {
+      palloc_free_page (pd);
+	  free (epd);
+	  return NULL;
+    }
 
   return epd;
 #else
@@ -34,7 +46,7 @@ pagedir_create (void)
 #endif
 }
 
-/* Destroys page directory PD, freeing all the pages it
+/* Destroys page directory EPD, freeing all the pages it
    references. */
 void
 pagedir_destroy (pagedir_t epd) 
@@ -42,30 +54,34 @@ pagedir_destroy (pagedir_t epd)
   uint32_t *pde;
   uint32_t *pd;
 #ifdef VM
-  ASSERT (epd != NULL);
+  if (epd == NULL)
+    return;
+
+  ASSERT (epd->pd != NULL);
 
   pd = epd->pd;
 #else
   pd = epd;
 #endif
 
-  if (pd == NULL)
-    return;
-
-  ASSERT (pd != base_page_dir);
-  for (pde = pd; pde < pd + pd_no (PHYS_BASE); pde++)
-    if (*pde & PTE_P) 
-      {
-        uint32_t *pt = pde_get_pt (*pde);
-        uint32_t *pte;
+  if (pd != NULL)
+  {
+    ASSERT (pd != base_page_dir);
+    for (pde = pd; pde < pd + pd_no (PHYS_BASE); pde++)
+      if (*pde & PTE_P) 
+        {
+          uint32_t *pt = pde_get_pt (*pde);
+          uint32_t *pte;
         
-        for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
-          if (*pte & PTE_P) 
-            palloc_free_page (pte_get_page (*pte));
-        palloc_free_page (pt);
-      }
-  palloc_free_page (pd);
+          for (pte = pt; pte < pt + PGSIZE / sizeof *pte; pte++)
+            if (*pte & PTE_P) 
+              palloc_free_page (pte_get_page (*pte));
+          palloc_free_page (pt);
+        }
+    palloc_free_page (pd);
+  }
 #ifdef VM
+  vm_destroy_sup_page_table (&epd->spd);
   free (epd);
 #endif
 }
@@ -108,7 +124,7 @@ lookup_page (uint32_t *pd, const void *vaddr, bool create)
   return &pt[pt_no (vaddr)];
 }
 
-/* Adds a mapping in page directory PD from user virtual page
+/* Adds a mapping in page directory EPD from user virtual page
    UPAGE to the physical frame identified by kernel virtual
    address KPAGE.
    UPAGE must not already be mapped.
@@ -143,6 +159,13 @@ pagedir_set_page (pagedir_t epd, void *upage, void *kpage, bool writable)
     {
       ASSERT ((*pte & PTE_P) == 0);
       *pte = pte_create_user (kpage, writable);
+#ifdef VM
+      if (vm_get_new_sup_page_table_entry (&epd->spd, upage) == NULL)
+        {
+          *pte &= ~PTE_P;
+          return false;
+        }
+#endif
       return true;
     }
   else
@@ -150,7 +173,7 @@ pagedir_set_page (pagedir_t epd, void *upage, void *kpage, bool writable)
 }
 
 /* Looks up the physical address that corresponds to user virtual
-   address UADDR in PD.  Returns the kernel virtual address
+   address UADDR in EPD.  Returns the kernel virtual address
    corresponding to that physical address, or a null pointer if
    UADDR is unmapped. */
 void *
@@ -175,8 +198,37 @@ pagedir_get_page (pagedir_t epd, const void *uaddr)
     return NULL;
 }
 
+#ifdef VM
+/* LOGOS-ADDED FUNCTION
+   Looks up the supplemental page table entry that corresponds to user virtual
+   address UADDR in EPD.  Returns the pointer of struct vm_sup_page_table_entry
+   corresponding to that physical address, or a null pointer if
+   UADDR is unmapped. */
+struct vm_sup_page_table_entry *
+pagedir_get_sup_page_table_entry (pagedir_t epd, const void *uaddr)
+{
+  uint32_t *pte;
+  uint32_t *pd;
+  struct vm_sup_page_table_entry* ret;
+  ASSERT (epd != NULL);
+  ASSERT (is_user_vaddr (uaddr));
+
+  pd = epd->pd;
+  
+  pte = lookup_page (pd, uaddr, false);
+  if (pte != NULL && (*pte & PTE_P) != 0)
+  {
+     ret = vm_get_sup_page_table_entry (&epd->spd, uaddr);
+	 ASSERT (ret != NULL);
+	 return ret;
+  }
+  else
+    return NULL;
+}
+#endif
+
 /* Marks user virtual page UPAGE "not present" in page
-   directory PD.  Later accesses to the page will fault.  Other
+   directory EPD.  Later accesses to the page will fault.  Other
    bits in the page table entry are preserved.
    UPAGE need not be mapped. */
 void
@@ -203,10 +255,10 @@ pagedir_clear_page (pagedir_t epd, void *upage)
     }
 }
 
-/* Returns true if the PTE for virtual page VPAGE in PD is dirty,
+/* Returns true if the PTE for virtual page VPAGE in EPD is dirty,
    that is, if the page has been modified since the PTE was
    installed.
-   Returns false if PD contains no PTE for VPAGE. */
+   Returns false if EPD contains no PTE for VPAGE. */
 bool
 pagedir_is_dirty (pagedir_t epd, const void *vpage) 
 {
@@ -225,7 +277,7 @@ pagedir_is_dirty (pagedir_t epd, const void *vpage)
 }
 
 /* Set the dirty bit to DIRTY in the PTE for virtual page VPAGE
-   in PD. */
+   in EPD. */
 void
 pagedir_set_dirty (pagedir_t epd, const void *vpage, bool dirty) 
 {

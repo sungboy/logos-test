@@ -15,8 +15,14 @@ enum vm_page_storage_type
 struct vm_sup_page_table_entry
 {
    struct hash_elem elem;
+   void * upage;
    enum vm_page_storage_type storage_type;
    swap_disk_block_t block_num;
 };
+
+bool vm_init_sup_page_table (struct hash *spd);
+void vm_destroy_sup_page_table (struct hash *spd);
+struct vm_sup_page_table_entry* vm_get_new_sup_page_table_entry (struct hash *spd, void * upage);
+struct vm_sup_page_table_entry* vm_get_sup_page_table_entry (struct hash *spd, void * upage);
 
 #endif /* vm/vm-sup-page-table.h */
