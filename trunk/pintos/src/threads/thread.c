@@ -136,6 +136,10 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 
 #ifdef USERPROG
+#ifdef VM
+  lock_init (&initial_thread->pagedir_lock);
+#endif
+
   lock_init (&thread_relation_lock);
 
   initial_thread->parent = NULL;
@@ -337,6 +341,10 @@ thread_create_internal (const char *name, int priority,
 
 #ifdef USERPROG
   /* Initialize some variables for user process. */
+#ifdef VM
+  lock_init (&t->pagedir_lock);
+#endif
+
   if(for_kernel_only)
     t->is_user_process = false;
   else
@@ -844,6 +852,8 @@ schedule_tail (struct thread *prev)
 
 #ifdef USERPROG
   /* Activate the new address space. */
+  /* Strictly speaking, we must get the page directory lock, cur->pagedir_lock, if VM is defined. 
+     But it is hard to implement the code getting the lock in scheduler, and the current code setting and removing the page directory allows us to forget about the lock, so we do it without acquiring the lock. */
   process_activate ();
 #endif
 
