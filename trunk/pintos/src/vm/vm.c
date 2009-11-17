@@ -9,7 +9,9 @@
 #include "userprog/pagedir.h"
 #include "threads/synch.h"
 #include "threads/malloc.h"
+#include "threads/vaddr.h"
 #include <kernel/list.h>
+#include <kernel/hash.h>
 
 /*#include "userprog/process.h"
 #include "userprog/gdt.h"
@@ -23,8 +25,7 @@
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
-#include "threads/vaddr.h"
-#include <kernel/hash.h>*/
+*/
 
 static void vm_set_all_thread_pages_nonpageable (struct thread* t);
 static struct vm_frame_table_entry *vm_replacement_policy (struct thread* t);
@@ -113,6 +114,89 @@ vm_set_all_thread_pages_nonpageable (struct thread* t)
     }
 
   lock_release (&vm_frame_table_lock);
+}
+
+/* LOGOS-ADDED FUNCTION */
+static unsigned
+hash_hash_vm_sup_page_table_entry (const struct hash_elem *element, void *aux UNUSED)
+{
+  struct vm_sup_page_table_entry* spte = hash_entry (element, struct vm_sup_page_table_entry, elem);
+  return hash_int ((int)spte->upage);
+}
+
+/* LOGOS-ADDED FUNCTION */
+static bool
+hash_less_vm_sup_page_table_entry (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
+{
+  struct vm_sup_page_table_entry* sptea = hash_entry (a, struct vm_sup_page_table_entry, elem);
+  struct vm_sup_page_table_entry* spteb = hash_entry (b, struct vm_sup_page_table_entry, elem);
+
+  return sptea->upage < spteb->upage;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+static void
+hash_release_action_vm_sup_page_table_entry (struct hash_elem *element, void *aux UNUSED)
+{
+  struct vm_sup_page_table_entry* spte = hash_entry (element, struct vm_sup_page_table_entry, elem);
+  free(spte);
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+struct vm_sup_page_table_entry*
+vm_get_new_sup_page_table_entry (struct hash *spd, void * upage)
+{
+  struct vm_sup_page_table_entry* ret;
+
+  ret = (struct vm_sup_page_table_entry*)malloc (sizeof (struct vm_sup_page_table_entry));
+  if(ret == NULL)
+	  return NULL;
+
+  ASSERT (is_user_vaddr (upage) && pg_ofs (upage) == 0);
+  
+  ret->upage = upage;
+  ret->storage_type = PAGE_STORAGE_NONE;
+  ret->block_num = 0;
+
+  hash_insert (spd, &ret->elem);
+
+  return ret;
+}
+
+/* LOGOS-ADDED FUNCTION
+   */
+struct vm_sup_page_table_entry*
+vm_get_sup_page_table_entry (struct hash *spd, void * upage)
+{
+  struct hash_elem* elem;
+  struct vm_sup_page_table_entry* ret;
+  struct vm_sup_page_table_entry temp_spte;
+
+  temp_spte.upage = upage;
+
+  elem = hash_find (spd, &temp_spte.elem);
+  if(elem == NULL)
+	  return NULL;
+
+  ret = hash_entry (elem, struct vm_sup_page_table_entry, elem);
+
+  return ret;
+}
+
+/* LOGOS-ADDED FUNCTION */
+bool
+vm_init_sup_page_table (struct hash *spd)
+{
+  return hash_init (spd, hash_hash_vm_sup_page_table_entry, hash_less_vm_sup_page_table_entry, NULL);
+}
+
+/* LOGOS-ADDED FUNCTION */
+void
+vm_destroy_sup_page_table (struct hash *spd)
+{
+  hash_destroy (spd, hash_release_action_vm_sup_page_table_entry);
 }
 
 /* LOGOS-ADDED FUNCTION
