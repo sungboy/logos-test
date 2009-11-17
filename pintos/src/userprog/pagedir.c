@@ -218,7 +218,7 @@ pagedir_get_sup_page_table_entry (pagedir_t epd, const void *uaddr)
   pte = lookup_page (pd, uaddr, false);
   if (pte != NULL && (*pte & PTE_P) != 0)
   {
-     ret = vm_get_sup_page_table_entry (&epd->spd, uaddr);
+     ret = vm_get_sup_page_table_entry (&epd->spd, (void*)uaddr);
 	 ASSERT (ret != NULL);
 	 return ret;
   }

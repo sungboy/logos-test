@@ -245,6 +245,9 @@ process_exit (int status)
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
+#ifdef VM
+  lock_acquire (&cur->pagedir_lock);
+#endif
   pd = cur->pagedir;
   if (pd != NULL) 
     {
@@ -259,6 +262,9 @@ process_exit (int status)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+#ifdef VM
+  lock_release (&cur->pagedir_lock);
+#endif
 
   /* Destory the file table of the current process. */
   process_destroy_file_table(cur);
@@ -370,10 +376,21 @@ load (const char *file_name, void (**eip) (void), void **esp)
   int i;
 
   /* Allocate and activate page directory. */
+#ifdef VM
+  lock_acquire (&t->pagedir_lock);
+#endif
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
-    goto done;
+    {
+#ifdef VM
+	  lock_release (&t->pagedir_lock);
+#endif
+      goto done;
+    }
   process_activate ();
+#ifdef VM
+  lock_release (&t->pagedir_lock);
+#endif
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -617,22 +634,35 @@ install_page (void *upage, void *kpage, bool writable)
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
+#ifdef VM
+  lock_acquire (&t->pagedir_lock);
+#endif
   if (pagedir_get_page (t->pagedir, upage) != NULL)
     {
       ASSERT (0);
+#ifdef VM
+	  lock_release (&t->pagedir_lock);
+#endif
       return false;
     }
 
   if (!pagedir_set_page (t->pagedir, upage, kpage, writable))
-    return false;
+    {
+#ifdef VM
+      lock_release (&t->pagedir_lock);
+#endif
+      return false;
+    }
 
 #ifdef VM
   /* Make the page pageable. */
   if (!vm_set_page_pageable (t, upage))
     {
       pagedir_clear_page (t->pagedir, upage);
+      lock_release (&t->pagedir_lock);
       return false;
     }
+  lock_release (&t->pagedir_lock);
 #endif
 
   return true;      
@@ -656,6 +686,9 @@ process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool wri
   pg_count = pg_no (pg_round_down (uvaddr + size - 1)) - pg_no (upage) + 1;
 
   t = thread_current ();
+#ifdef VM
+  lock_acquire (&t->pagedir_lock);
+#endif
   pd = t->pagedir;
 
   for (ui=0; ui<pg_count; ui++)
@@ -664,14 +697,27 @@ process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool wri
 	  if (writable)
         {
           if (!pagedir_is_writable (pd, upagec))
-            return false;
+            {
+#ifdef VM
+              lock_release (&t->pagedir_lock);
+#endif
+              return false;
+            }
         }
 	  else
 	    {
 	      if (!pagedir_is_readable (pd, upagec))
-		    return false;
+            {
+#ifdef VM
+              lock_release (&t->pagedir_lock);
+#endif
+		      return false;
+            }
 	    }
     }
+#ifdef VM
+  lock_release (&t->pagedir_lock);
+#endif
 
   return true;
 }

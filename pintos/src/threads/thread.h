@@ -118,14 +118,18 @@ struct thread
     struct list_elem sibling_elem;      /* List element for connecting siblings. For use, acquire thread_relation_lock first. */
     /* LOGOS-ADDED VARIABLE END */
 
-	/* Owned by userprog/process.c. */
+#ifdef VM
+	struct lock pagedir_lock;           /* LOGOS-ADDED VARIABLE. Page directory Lock. */
+#endif
     pagedir_t pagedir;                  /* Page directory. */
+
+	/* Owned by userprog/process.c. */
 	/* LOGOS-ADDED VARIABLE START */
     bool is_user_process;                   /* Whether this thread is for user process or not. Can't be changed. */
     enum process_status user_process_state; /* User process state. For use, acquire thread_relation_lock first. */
 
     struct semaphore exit_sync_for_child;   /* Used by child to wait for a parent. */
-    struct semaphore* exit_sync_for_parent;  /* Used by parent to wait for a child. */
+    struct semaphore* exit_sync_for_parent; /* Used by parent to wait for a child. */
     int exit_code;                          /* Saved Exit Code. */
 
     struct lock file_table_lock;        /* Lock for the file table. */
