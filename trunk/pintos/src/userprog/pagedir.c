@@ -425,6 +425,14 @@ invalidate_pagedir (pagedir_t epd)
 bool
 pagedir_is_readable (pagedir_t epd, const void *uaddr)
 {
+  return pagedir_exist (epd, uaddr);
+}
+
+/* LOGOS-ADDED FUNCTION
+   Looks up the page and check whether the page exists. */
+bool
+pagedir_exist (pagedir_t epd, const void *uaddr)
+{
   uint32_t *pte;
   uint32_t *pd;
 #ifdef VM

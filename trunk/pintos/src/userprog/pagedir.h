@@ -34,6 +34,7 @@ bool pagedir_is_accessed (pagedir_t epd, const void *upage);
 void pagedir_set_accessed (pagedir_t epd, const void *upage, bool accessed);
 void pagedir_activate (pagedir_t epd);
 
+bool pagedir_exist (pagedir_t epd, const void *uaddr);
 bool pagedir_is_readable (pagedir_t epd, const void *uaddr);
 bool pagedir_is_writable (pagedir_t epd, const void *uaddr);
 

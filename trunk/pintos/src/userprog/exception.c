@@ -4,6 +4,10 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
+#ifdef VM
+#include "vm/vm.h"
+#endif
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -108,20 +112,19 @@ kill (struct intr_frame *f)
     }
 }
 
-/* Page fault handler.  This is a skeleton that must be filled in
-   to implement virtual memory.  Some solutions to project 2 may
-   also require modifying this code.
+/* Page fault handler. 
 
    At entry, the address that faulted is in CR2 (Control Register
    2) and information about the fault, formatted as described in
    the PF_* macros in exception.h, is in F's error_code member.  The
-   example code here shows how to parse that information.  You
+   code here shows how to parse that information.  You
    can find more information about both of these in the
    description of "Interrupt 14--Page Fault Exception (#PF)" in
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void
 page_fault (struct intr_frame *f) 
 {
+  bool is_error = true;
   bool not_present;  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
@@ -148,14 +151,34 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
+#ifdef VM
+  /* Try to recover from this page fault using the virtual memory technique. */
+  if (not_present && is_user_vaddr(fault_addr))
+    {
+      struct page_identifier pg_id;
+      pg_id.t = thread_current ();
+	  pg_id.upage = fault_addr;
+
+      /* Try to load the user page not in physical memory now. */
+      if (is_error)
+        is_error = vm_request_user_page (&pg_id) == NULL;
+
+      /* Try to make the stack grow if the fault address is in the stack area. */
+      if (is_error)
+        is_error = !vm_try_stack_growth (&pg_id);
+    }
+#endif
+
+  /* If this is the real error */
+  if(is_error)
+    {
+      /* Print the error message and kill this thread. */
+      printf ("Page fault at %p: %s error %s page in %s context.\n",
+              fault_addr,
+              not_present ? "not present" : "rights violation",
+              write ? "writing" : "reading",
+              user ? "user" : "kernel");
+      kill (f);
+    }
 }
 
