@@ -11,6 +11,9 @@
 #include "threads/loader.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#ifdef VM
+#include "vm/vm.h"
+#endif
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -68,14 +71,15 @@ palloc_init (void)
              user_pages, "user pool");
 }
 
-/* Obtains and returns a group of PAGE_CNT contiguous free pages.
+/* LOGOS-ADDED FUNCTION
+   Obtains and returns a group of PAGE_CNT contiguous free pages.
    If PAL_USER is set, the pages are obtained from the user pool,
    otherwise from the kernel pool.  If PAL_ZERO is set in FLAGS,
    then the pages are filled with zeros.  If too few pages are
    available, returns a null pointer, unless PAL_ASSERT is set in
    FLAGS, in which case the kernel panics. */
-void *
-palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
+static void *
+palloc_get_multiple_internal (enum palloc_flags flags, size_t page_cnt, bool allow_vm)
 {
   struct pool *pool = flags & PAL_USER ? &user_pool : &kernel_pool;
   void *pages;
@@ -93,6 +97,11 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
   else
     pages = NULL;
 
+#ifdef VM
+  if (pages == NULL && allow_vm && (flags & PAL_USER) && page_cnt == 1)
+    pages = vm_request_new_user_page ();
+#endif
+
   if (pages != NULL) 
     {
       if (flags & PAL_ZERO)
@@ -107,6 +116,24 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
   return pages;
 }
 
+/* Obtains and returns a group of PAGE_CNT contiguous free pages.
+   If PAL_USER is set, the pages are obtained from the user pool,
+   otherwise from the kernel pool. 
+   If the virtual memory is used, palloc_get_multiple with PAL_USER is not allowed. 
+   In that case, use contiguous virtual pages instead of contiguous physical pages.
+   If PAL_ZERO is set in FLAGS, then the pages are filled with zeros. 
+   If too few pages are available, returns a null pointer, unless PAL_ASSERT is set in
+   FLAGS, in which case the kernel panics. */
+void *
+palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
+{
+#ifdef VM
+  ASSERT ((flags & PAL_USER) == 0);
+#endif
+
+  return palloc_get_multiple_internal (flags, page_cnt, true);
+}
+
 /* Obtains a single free page and returns its kernel virtual
    address.
    If PAL_USER is set, the page is obtained from the user pool,
@@ -117,8 +144,37 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
 void *
 palloc_get_page (enum palloc_flags flags) 
 {
-  return palloc_get_multiple (flags, 1);
+  return palloc_get_multiple_internal (flags, 1, true);
 }
+
+#ifdef VM
+/* LOGOS-ADDED FUNCTION
+   Obtains and returns a group of PAGE_CNT contiguous free pages without the virtual memory technique.
+   If PAL_USER is set, the pages are obtained from the user pool,
+   otherwise from the kernel pool.  If PAL_ZERO is set in FLAGS,
+   then the pages are filled with zeros.  If too few pages are
+   available, returns a null pointer, unless PAL_ASSERT is set in
+   FLAGS, in which case the kernel panics. */
+void *
+palloc_get_multiple_without_vm (enum palloc_flags flags, size_t page_cnt)
+{
+  return palloc_get_multiple_internal (flags, page_cnt, false);
+}
+
+/* LOGOS-ADDED FUNCTION
+   Obtains a single free page and returns its kernel virtual
+   address without the virtual memory technique.
+   If PAL_USER is set, the page is obtained from the user pool,
+   otherwise from the kernel pool.  If PAL_ZERO is set in FLAGS,
+   then the page is filled with zeros.  If no pages are
+   available, returns a null pointer, unless PAL_ASSERT is set in
+   FLAGS, in which case the kernel panics. */
+void *
+palloc_get_page_without_vm (enum palloc_flags flags) 
+{
+  return palloc_get_multiple_internal (flags, 1, false);
+}
+#endif
 
 /* Frees the PAGE_CNT pages starting at PAGES. */
 void

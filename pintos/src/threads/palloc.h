@@ -17,6 +17,10 @@ extern size_t user_page_limit;
 void palloc_init (void);
 void *palloc_get_page (enum palloc_flags);
 void *palloc_get_multiple (enum palloc_flags, size_t page_cnt);
+#ifdef VM
+void *palloc_get_page_without_vm (enum palloc_flags);
+void *palloc_get_multiple_without_vm (enum palloc_flags, size_t page_cnt);
+#endif
 void palloc_free_page (void *);
 void palloc_free_multiple (void *, size_t page_cnt);
 

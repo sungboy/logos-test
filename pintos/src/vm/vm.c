@@ -172,6 +172,36 @@ vm_destroy_sup_page_table (struct hash *spd)
 }
 
 /* LOGOS-ADDED FUNCTION
+   Reaplace a existing user page to the user page represented by pg_id and return it. 
+   Sometimes, some physical free memory pages for user can be available. 
+*/
+void *vm_request_user_page (const struct page_identifier* pg_id)
+{
+  /* TODO : Implement here correctly. */
+  /* Important : Check pg_id is correct. */
+  return NULL;
+}
+
+/* LOGOS-ADDED FUNCTION
+   Reaplace a existing user page and return it as a new user page when called by allocators with no more physical memory for user available. 
+*/
+void *vm_request_new_user_page (void)
+{
+  /* TODO : Implement here correctly. */
+  /* Important : At the end, remove the page that will be returned from the memory frame table. */
+  return NULL;
+}
+
+/* LOGOS-ADDED FUNCTION
+   Try to make the stack grow to cover the page represented by pg_id. 
+*/
+bool vm_try_stack_growth (const struct page_identifier* pg_id)
+{
+  /* TODO : Implement here correctly. */
+  return false;
+}
+
+/* LOGOS-ADDED FUNCTION
    Select a page in memory to be replaced. 
 */
 static struct vm_frame_table_entry *
