@@ -216,14 +216,14 @@ pagedir_get_sup_page_table_entry (pagedir_t epd, const void *uaddr)
   pd = epd->pd;
   
   pte = lookup_page (pd, uaddr, false);
-  if (pte != NULL && (*pte & PTE_P) != 0)
+  if (pte != NULL)
   {
      ret = vm_get_sup_page_table_entry (&epd->spd, (void*)uaddr);
 	 ASSERT (ret != NULL);
 	 return ret;
   }
-  else
-    return NULL;
+
+  return NULL;
 }
 #endif
 
@@ -428,6 +428,8 @@ pagedir_is_readable (pagedir_t epd, const void *uaddr)
   uint32_t *pte;
   uint32_t *pd;
 #ifdef VM
+  struct vm_sup_page_table_entry *spte;
+
   ASSERT (epd != NULL);
 
   pd = epd->pd;
@@ -439,8 +441,19 @@ pagedir_is_readable (pagedir_t epd, const void *uaddr)
   
   pte = lookup_page (pd, uaddr, false);
   if (pte != NULL)
-    if ((*pte & PTE_P) != 0)
-      return true;
+    {
+      if ((*pte & PTE_P) != 0)
+        return true;
+
+#ifdef VM
+      spte = pagedir_get_sup_page_table_entry (epd, uaddr);
+
+      ASSERT (spte != NULL);
+
+      if (spte->storage_type != PAGE_STORAGE_NONE)
+	    return true;
+#endif
+    }
 
   return false;
 }
@@ -453,6 +466,8 @@ pagedir_is_writable (pagedir_t epd, const void *uaddr)
   uint32_t *pte;
   uint32_t *pd;
 #ifdef VM
+  struct vm_sup_page_table_entry *spte;
+
   ASSERT (epd != NULL);
 
   pd = epd->pd;
@@ -464,8 +479,20 @@ pagedir_is_writable (pagedir_t epd, const void *uaddr)
   
   pte = lookup_page (pd, uaddr, false);
   if (pte != NULL)
-    if ((*pte & PTE_P) != 0 && (*pte & PTE_W) != 0)
-      return true;
+    if ((*pte & PTE_W) != 0)
+      {
+        if ((*pte & PTE_P) != 0)
+          return true;
+
+#ifdef VM
+        spte = pagedir_get_sup_page_table_entry (epd, uaddr);
+
+        ASSERT (spte != NULL);
+
+        if (spte->storage_type != PAGE_STORAGE_NONE)
+          return true;
+#endif
+      }
 
   return false;
 }
