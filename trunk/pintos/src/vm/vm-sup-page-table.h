@@ -1,7 +1,6 @@
 #ifndef VM_SUP_PAGE_TABLE_H
 #define VM_SUP_PAGE_TABLE_H
 
-#include "vm/swap-disk.h"
 #include <kernel/hash.h>
 
 /* LOGOS-ADDED ENUMERATION */
@@ -17,7 +16,6 @@ struct vm_sup_page_table_entry
    struct hash_elem elem;
    void * upage;
    enum vm_page_storage_type storage_type;
-   swap_disk_block_t block_num;
 };
 
 bool vm_init_sup_page_table (struct hash *spd);

@@ -34,9 +34,15 @@
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
-//#ifdef VM
+#ifdef VM
+
+#ifndef FILESYS
+#error "VM cannot run without filesystem."
+#endif
+
 #include "vm/vm.h"
-//#endif
+#include "vm/swap-disk.h"
+#endif
 
 /* Amount of physical memory, in 4 kB pages. */
 size_t ram_pages;
@@ -116,6 +122,10 @@ main (void)
   /* Initialize file system. */
   disk_init ();
   filesys_init (format_filesys);
+#ifdef VM
+  if (!swap_disk_init ())
+    PANIC ("Cannot initialize the swap disk. ");
+#endif
 #endif
 
   printf ("Boot complete.\n");
