@@ -10,13 +10,14 @@
 #include <string.h>
 #include "userprog/pagedir.h"
 #include "threads/synch.h"
+#include "threads/palloc.h"
 #include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include <kernel/list.h>
 #include <kernel/hash.h>
 
 static void vm_set_all_thread_pages_nonpageable (struct thread* t);
-static struct vm_frame_table_entry *vm_replacement_policy (struct thread* t);
+static struct vm_frame_table_entry *vm_replacement_policy (const struct page_identifier *pg_id);
 
 struct lock vm_frame_table_lock; /* LOGOS-ADDED VARIABLE. Lock for the frame table. */
 struct list vm_frame_table;      /* LOGOS-ADDED VARIABLE. Before using this variable, acquire vm_frame_table_lock first. */
@@ -36,7 +37,7 @@ void
 vm_free_all_thread_user_memory (struct thread* t)
 {
   vm_set_all_thread_pages_nonpageable (t);
-  /* ... */
+  swap_disk_release_thread (t);
 }
 
 /* LOGOS-ADDED FUNCTION
@@ -174,16 +175,22 @@ vm_destroy_sup_page_table (struct hash *spd)
    Select a page in memory to be replaced. 
 */
 static struct vm_frame_table_entry *
-vm_replacement_policy (struct thread* t)
+vm_replacement_policy (const struct page_identifier *pg_id)
 {
   /* From Dongmin To Team Member : My part has not completed yet, but I think it is possible to implement this function using the data structures I made. 
+     The paramter pg_id is the page identifier that represent the page we want to load. pg_id.t is NULL if the page is a new page. 
      Use vm_frame_table for the page frame table. 
 	 It is a list of struct vm_frame_table_entry. Each struct vm_frame_table_entry represents a page in memory. 
-	 Use pg_id in struct vm_frame_table_entry, t->pagedir and pagedir_* functions for the accessed bit and the dirty(modified) bit. 
-     I think you don't have to consider mutual exclusion and locking much when you implement this function because I will ensure that this function is called by only one thread at a time. 
+	 Use pg_id in struct vm_frame_table_entry, (struct vm_frame_table_entry).pg_id.t->pagedir and pagedir_* functions for the accessed bit and the dirty(modified) bit. 
+     I think you don't have to consider the mutual exclusion and locking much when you implement this function because I will ensure that this function is called by only one thread at a time. 
+	 ( There may be some exceptions such as t->pagedir_lock, but if you want me to add it, i'll do that. Just consider the mutual exclusion and locking related to your own data structure 
+	   although I think the additional mutual exclusion and locking is not necessary. )
      I think you have to add some external variables such as a clock hand.
      Implement the clock algorithm and return the pointer of struct vm_frame_table_entry representing the page you want to replace. 
      */
-  /* TODO : Implement this function correctly. */
-  return NULL;
+  /* TODO : Modify this function to run the clock algorithm correctly. */
+  if (list_empty (&vm_frame_table))
+    return NULL;
+
+  return list_entry (list_begin (&vm_frame_table), struct vm_frame_table_entry, elem);
 }

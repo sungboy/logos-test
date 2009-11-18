@@ -119,7 +119,7 @@ struct thread
     /* LOGOS-ADDED VARIABLE END */
 
 #ifdef VM
-	struct lock pagedir_lock;           /* LOGOS-ADDED VARIABLE. Page directory Lock. If you want to change the page table of other threads, you may have to acquire more related locks. */
+	struct lock pagedir_lock;           /* LOGOS-ADDED VARIABLE. Page directory Lock. If you want to change the page table of a thread, you may have to acquire more related locks. */
 #endif
     pagedir_t pagedir;                  /* Page directory. */
 
