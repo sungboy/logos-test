@@ -3,6 +3,13 @@
 
 #include "threads/thread.h"
 
+/* LOGOS-ADDED TYPE */
+struct page_identifier
+{
+  struct thread* t;                     /* The owner thread of the page. */
+  void * upage;                         /* The user virtual page start address. */
+};
+
 void vm_init (void);
 void vm_free_all_thread_user_memory (struct thread* t);
 bool vm_set_page_pageable (struct thread* t, void *upage);

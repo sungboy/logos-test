@@ -1,5 +1,7 @@
 #include "vm/vm.h"
 #include "vm/vm-sup-page-table.h"
+#include "vm/vm-frame-table.h"
+#include "vm/swap-disk.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -13,41 +15,11 @@
 #include <kernel/list.h>
 #include <kernel/hash.h>
 
-/*#include "userprog/process.h"
-#include "userprog/gdt.h"
-#include "userprog/tss.h"
-#include "userprog/syscall.h"
-#include "filesys/directory.h"
-#include "filesys/file.h"
-#include "filesys/filesys.h"
-#include "threads/flags.h"
-#include "threads/init.h"
-#include "threads/interrupt.h"
-#include "threads/palloc.h"
-#include "threads/thread.h"
-*/
-
 static void vm_set_all_thread_pages_nonpageable (struct thread* t);
 static struct vm_frame_table_entry *vm_replacement_policy (struct thread* t);
 
-/* LOGOS-ADDED TYPE */
-struct page_identifier
-{
-  struct thread* t;                     /* The owner thread of the page. */
-  void * upage;                         /* The user virtual page start address. */
-};
-
-/* LOGOS-ADDED TYPE */
-struct vm_frame_table_entry
-{
-  struct list_elem elem;                /* Before using this variable, acquire vm_frame_table_lock first. */
-  struct page_identifier pg_id;         /* Before using this variable, acquire vm_frame_table_lock first. */
-  struct lock change_lock;              /* The lock for jobs on this frame such as swapping. */
-};
-
-/* LOGOS-ADDED VARIABLE */
-static struct lock vm_frame_table_lock; /* Lock for the frame table. */
-static struct list vm_frame_table;      /* Before using this variable, acquire vm_frame_table_lock first. */
+struct lock vm_frame_table_lock; /* LOGOS-ADDED VARIABLE. Lock for the frame table. */
+struct list vm_frame_table;      /* LOGOS-ADDED VARIABLE. Before using this variable, acquire vm_frame_table_lock first. */
 
 /* LOGOS-ADDED FUNCTION
    Initialize virtual memory. */
@@ -158,7 +130,6 @@ vm_get_new_sup_page_table_entry (struct hash *spd, void * upage)
   
   ret->upage = upage;
   ret->storage_type = PAGE_STORAGE_NONE;
-  ret->block_num = 0;
 
   hash_insert (spd, &ret->elem);
 
