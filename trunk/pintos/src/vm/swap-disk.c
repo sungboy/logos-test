@@ -24,17 +24,19 @@ struct swap_slot
   struct page_identifier pg_id;
 };
 
-static struct lock swap_disk_lock;             /* LOGOS-ADDED VARIABLES. The swap disk lock used all swap functions. */
-static struct disk * swap_disk = NULL;         /* LOGOS-ADDED VARIABLES. the struct disk of the swap disk. */
-static swap_slot_num_t swap_pg_cnt = 0;        /* LOGOS-ADDED VARIABLES. The number of pages the swap disk can store. */
-static struct swap_slot *swap_table = NULL;    /* LOGOS-ADDED VARIABLES. The swap table. An array of (struct swap_slot)s. */
-static swap_slot_num_t swap_next_slot = 0;     /* LOGOS-ADDED VARIABLES. The next slot to start finding free slot. */
+static struct lock swap_disk_lock;                 /* LOGOS-ADDED VARIABLES. The swap disk lock . */
+static struct lock swap_data_structure_lock;       /* LOGOS-ADDED VARIABLES. The swap data structure lock. */
+static struct disk * swap_disk = NULL;             /* LOGOS-ADDED VARIABLES. the struct disk of the swap disk. */
+static swap_slot_num_t swap_pg_cnt = 0;            /* LOGOS-ADDED VARIABLES. The number of pages the swap disk can store. */
+static struct swap_slot *swap_table = NULL;        /* LOGOS-ADDED VARIABLES. The swap table. An array of (struct swap_slot)s. */
+static swap_slot_num_t swap_next_slot = 0;         /* LOGOS-ADDED VARIABLES. The next slot to start finding free slot. */
 
 /* LOGOS-ADDED FUNCTION */
 bool swap_disk_init (void)
 {
   swap_slot_num_t tssn;
   lock_init (&swap_disk_lock);
+  lock_init (&swap_data_structure_lock);
 
   swap_disk = disk_get (1, 1);
   if (swap_disk == NULL)
@@ -84,14 +86,14 @@ swap_disk_allocate (const struct page_identifier *pg_id, swap_slot_num_t* ssn, s
   ASSERT (pg_id != NULL && ssn != NULL && prev_pg_id !=NULL);
   ASSERT (pg_id->t != NULL);
 
-  lock_acquire (&swap_disk_lock);
+  lock_acquire (&swap_data_structure_lock);
 
   ASSERT (swap_table!= NULL && swap_next_slot < swap_pg_cnt);
 
   /* Check the swap disk is something like an empty disk. */
   if (swap_pg_cnt == 0)
     {
-      lock_release (&swap_disk_lock);
+      lock_release (&swap_data_structure_lock);
       return false;
     }
 
@@ -104,7 +106,7 @@ swap_disk_allocate (const struct page_identifier *pg_id, swap_slot_num_t* ssn, s
 	  *ssn = tssn;
       memcpy (prev_pg_id, &swap_table[tssn].pg_id, sizeof (*prev_pg_id));
 
-      lock_release (&swap_disk_lock);
+      lock_release (&swap_data_structure_lock);
       return true;
     }
 
@@ -115,7 +117,7 @@ swap_disk_allocate (const struct page_identifier *pg_id, swap_slot_num_t* ssn, s
     {
       if (!first && tssn == swap_next_slot)
         {
-          lock_release (&swap_disk_lock);
+          lock_release (&swap_data_structure_lock);
 		  return false;
         }
 
@@ -140,7 +142,7 @@ swap_disk_allocate (const struct page_identifier *pg_id, swap_slot_num_t* ssn, s
   memcpy (&swap_table[tssn].pg_id, pg_id, sizeof (swap_table[tssn].pg_id));
   *ssn = tssn;
 
-  lock_release (&swap_disk_lock);
+  lock_release (&swap_data_structure_lock);
 
   return true;
 }
@@ -154,10 +156,13 @@ swap_disk_store (swap_slot_num_t ssn, void* kpage)
   ASSERT (kpage != NULL && is_kernel_vaddr(kpage) && pg_ofs(kpage)==0);
 
   lock_acquire (&swap_disk_lock);
+  lock_acquire (&swap_data_structure_lock);
 
   ASSERT (ssn < swap_pg_cnt);
   ASSERT (swap_disk != NULL && swap_table != NULL);
   ASSERT (swap_table[ssn].state == SWAP_SLOT_ALLOCATED);
+
+  lock_release (&swap_data_structure_lock);
 
   for (dsn = 0; dsn < PGSIZE / DISK_SECTOR_SIZE; dsn++)
     disk_write (swap_disk, ssn * PGSIZE / DISK_SECTOR_SIZE + dsn, kpage + dsn * DISK_SECTOR_SIZE);
@@ -175,6 +180,7 @@ swap_disk_load_and_release (const struct page_identifier *pg_id, void* kpage)
   ASSERT (pg_id != NULL && is_kernel_vaddr(kpage) && pg_ofs(kpage)==0);
 
   lock_acquire (&swap_disk_lock);
+  lock_acquire (&swap_data_structure_lock);
 
   ASSERT (swap_disk != NULL && swap_table != NULL);
 
@@ -182,11 +188,12 @@ swap_disk_load_and_release (const struct page_identifier *pg_id, void* kpage)
 
   ASSERT (ssn < swap_pg_cnt);
   ASSERT (swap_table[ssn].state == SWAP_SLOT_ALLOCATED);
+ 
+  swap_table[ssn].state = SWAP_SLOT_RELEASED_DATA;
+  lock_release (&swap_data_structure_lock);
 
   for (dsn = 0; dsn < PGSIZE / DISK_SECTOR_SIZE; dsn++)
     disk_read (swap_disk, ssn * PGSIZE / DISK_SECTOR_SIZE + dsn, kpage + dsn * DISK_SECTOR_SIZE);
-
-  swap_table[ssn].state = SWAP_SLOT_RELEASED_DATA;
 
   lock_release (&swap_disk_lock);
 }
@@ -199,7 +206,7 @@ swap_disk_release_thread (struct thread *t)
 
   ASSERT (t != NULL);
 
-  lock_acquire (&swap_disk_lock);
+  lock_acquire (&swap_data_structure_lock);
 
   ASSERT (swap_table != NULL);
 
@@ -208,5 +215,5 @@ swap_disk_release_thread (struct thread *t)
       if (swap_table[tssn].pg_id.t == t)
         swap_table[tssn].state = SWAP_SLOT_NO_DATA;
 
-  lock_release (&swap_disk_lock);
+  lock_release (&swap_data_structure_lock);
 }
