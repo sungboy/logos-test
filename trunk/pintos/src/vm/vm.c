@@ -17,12 +17,15 @@
 #include <kernel/list.h>
 #include <kernel/hash.h>
 
+static void vm_move_clock_hand_to_next (void);
 static struct vm_frame_table_entry *vm_add_new_fte (struct thread* t, void *upage, bool frame_table_lock_required);
 static void vm_set_all_thread_pages_nonpageable_internal (struct thread* t, bool frame_table_lock_required);
+static void vm_remove_fte_from_frame_table_internal (struct vm_frame_table_entry *fte);
 static struct vm_frame_table_entry *vm_replacement_policy (const struct page_identifier *pg_id);
 
-struct lock vm_frame_table_lock; /* LOGOS-ADDED VARIABLE. Lock for the frame table. */
-struct list vm_frame_table;      /* LOGOS-ADDED VARIABLE. Before using this variable, acquire vm_frame_table_lock first. */
+struct lock vm_frame_table_lock;         /* LOGOS-ADDED VARIABLE. Lock for the frame table. */
+struct list vm_frame_table;              /* LOGOS-ADDED VARIABLE. Before using this variable, acquire vm_frame_table_lock first. */
+struct vm_frame_table_entry *clock_hand; /* LOGOS-ADDED VARIABLE. The clock hand for the clock algorithm. */
 
 /* LOGOS-ADDED FUNCTION
    Initialize virtual memory. */
@@ -31,6 +34,8 @@ vm_init (void)
 {
   lock_init (&vm_frame_table_lock);
   list_init (&vm_frame_table);
+
+  clock_hand = NULL;
 }
 
 /* LOGOS-ADDED FUNCTION
@@ -44,6 +49,18 @@ vm_free_all_thread_user_memory (struct thread* t)
   swap_disk_release_thread (t);
   lock_release (&t->pagedir_lock);
   lock_release (&vm_frame_table_lock);
+}
+
+/* LOGOS-ADDED FUNCTION */
+static void
+vm_move_clock_hand_to_next (void)
+{
+  if (clock_hand == NULL)
+    return;
+
+  clock_hand = list_entry (list_next (&clock_hand->elem), struct vm_frame_table_entry, elem);
+  if (&clock_hand->elem == list_end (&vm_frame_table))
+    clock_hand = list_entry (list_begin (&vm_frame_table), struct vm_frame_table_entry, elem);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -62,10 +79,28 @@ vm_add_new_fte (struct thread* t, void *upage, bool frame_table_lock_required)
   if (frame_table_lock_required)
     lock_acquire (&vm_frame_table_lock);
   list_push_back (&vm_frame_table, &fte->elem); 
+  if (clock_hand == NULL)
+    clock_hand = fte;
   if (frame_table_lock_required)
     lock_release (&vm_frame_table_lock);
 
   return fte;
+}
+
+/* LOGOS-ADDED FUNCTION
+   A internal function to remove a fte from the frame table. Acquire appropriate locks such as vm_frame_table_lock before using this function. */
+static void
+vm_remove_fte_from_frame_table_internal (struct vm_frame_table_entry *fte)
+{
+  lock_acquire (&fte->change_lock);
+  if (clock_hand == fte)
+    {
+      vm_move_clock_hand_to_next ();
+	  if (clock_hand == fte)
+        clock_hand = NULL;
+    }
+  list_remove (&fte->elem);
+  lock_release (&fte->change_lock);
 }
 
 /* LOGOS-ADDED FUNCTION
@@ -94,9 +129,7 @@ vm_set_all_thread_pages_nonpageable_internal (struct thread* t, bool frame_table
 
 	  if(fte->pg_id.t == t)
         {
-          lock_acquire (&fte->change_lock);
-          list_remove (e);
-	      lock_release (&fte->change_lock);
+		  vm_remove_fte_from_frame_table_internal (fte);
 
 	      free (fte);
         }
@@ -417,9 +450,7 @@ void *vm_request_new_user_page (void)
     }
 
   /* Remove the fte. */
-  lock_acquire (&fte->change_lock);
-  list_remove (&fte->elem);
-  lock_release (&fte->change_lock);
+  vm_remove_fte_from_frame_table_internal (fte);
   free (fte);
 
   /* Swap out. */
@@ -482,14 +513,11 @@ bool vm_try_stack_growth (const struct page_identifier* pg_id, void *esp)
   return b;
 }
 
-/* LOGOS-ADDED VARIABLE */
-struct vm_frame_table_entry *clock_hand;
-
 /* LOGOS-ADDED FUNCTION
-   Select a page in memory to be replaced. 
+   Select a page in memory to be replaced. Acquire vm_frame_table_lock and pg_id->t->pagedir_lock before calling this function. 
 */
 static struct vm_frame_table_entry *
-vm_replacement_policy (const struct page_identifier *pg_id UNUSED)
+vm_replacement_policy (const struct page_identifier *pg_id)
 {
   /* From Dongmin To Team Member : My part has not completed yet, but I think it is possible to implement this function using the data structures I made. 
      The paramter pg_id is the page identifier that represent the page we want to load. pg_id.t is NULL if the page is a new page. 
@@ -503,30 +531,48 @@ vm_replacement_policy (const struct page_identifier *pg_id UNUSED)
      Implement the clock algorithm and return the pointer of struct vm_frame_table_entry representing the page you want to replace. 
      */
 
-  /* TODO : Modify this function to run the clock algorithm correctly. */
+  struct vm_frame_table_entry *ret;
+  struct lock *cur_lock;
+
+  /* Check whether the frame table is empty or not. */
   if (list_empty (&vm_frame_table))
     return NULL;
 
-  if (!clock_hand)
-    clock_hand = list_entry (list_head (&vm_frame_table), struct vm_frame_table_entry, elem);
+  ASSERT (clock_hand != NULL);
 
-  while (pagedir_is_accessed (clock_hand->pg_id.t->pagedir, clock_hand->pg_id.upage))
+  /* Find a unused page. */
+  while (1)
     {
-      // set use bit 0
+      ASSERT (clock_hand->pg_id.t != NULL);
+
+	  cur_lock = NULL;
+	  if (pg_id->t == NULL || clock_hand->pg_id.t != pg_id->t)
+        {
+          cur_lock = &clock_hand->pg_id.t->pagedir_lock;
+          lock_acquire (cur_lock);
+        }
+
+      if (!pagedir_is_accessed (clock_hand->pg_id.t->pagedir, clock_hand->pg_id.upage))
+        {
+          if (cur_lock)
+            lock_release (cur_lock);
+          break;
+        }
+
+      /* Set use bit 0. */
       pagedir_set_accessed (clock_hand->pg_id.t->pagedir, clock_hand->pg_id.upage, false);
 
-      // move clock hand to next
+	  if (cur_lock)
+        lock_release (cur_lock);
 
-      if (list_entry (list_end (&vm_frame_table), struct vm_frame_table_entry, elem) == clock_hand)
-        clock_hand = list_entry (list_head (&vm_frame_table), struct vm_frame_table_entry, elem);
-      else
-        clock_hand = list_entry (list_next (&clock_hand->elem), struct vm_frame_table_entry, elem);
+      /* Move clock hand to next. */
+      vm_move_clock_hand_to_next ();
     }
 
-  // found unused page
-
-  // set clock hand next to the page will be replaced
-  clock_hand = list_entry (list_next (&clock_hand->elem), struct vm_frame_table_entry, elem);  
+  /* Now, we found a unused page. */
+  /* Set clock hand next to it and return it. */
+  ret = clock_hand;
+  vm_move_clock_hand_to_next ();
   
-  return list_entry (list_prev (&clock_hand->elem), struct vm_frame_table_entry, elem);
+  return ret;
 }
