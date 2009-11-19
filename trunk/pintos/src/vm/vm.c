@@ -189,6 +189,73 @@ vm_destroy_sup_page_table (struct hash *spd)
 }
 
 /* LOGOS-ADDED FUNCTION
+   A internal common function. Many locks must be acquired before calling this function. 
+*/
+static bool
+vm_prepare_to_swap_out_common (struct vm_frame_table_entry *fte, bool* write_required, swap_slot_num_t* ssn_to_write)
+{
+  swap_slot_num_t tssn;
+  struct page_identifier prev_pg_id;
+  struct vm_sup_page_table_entry *spte;
+  bool b;
+
+  *write_required = false;
+
+  /* First, check whether swap-out is required or not. */
+  if (pagedir_is_dirty (fte->pg_id.t->pagedir, fte->pg_id.upage))
+    {
+      /* If Swap-out is required, prepare to swap the old page out. */
+      b = swap_disk_allocate(&fte->pg_id, &tssn, &prev_pg_id);
+      if (!b)
+        return false;
+
+      if (prev_pg_id.t != fte->pg_id.t || 
+          prev_pg_id.upage != fte->pg_id.upage)
+        {
+          if (prev_pg_id.t != NULL)
+            {
+              lock_acquire (&prev_pg_id.t->pagedir_lock);
+
+              spte = pagedir_get_sup_page_table_entry (prev_pg_id.t->pagedir, prev_pg_id.upage);
+              ASSERT (spte != NULL);
+
+              spte->storage_type = PAGE_STORAGE_NONE;
+              pagedir_set_dirty (prev_pg_id.t->pagedir, prev_pg_id.upage, true);
+
+              lock_release (&prev_pg_id.t->pagedir_lock);
+            }
+
+          spte = pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage);
+          ASSERT (spte != NULL);
+          ASSERT (spte->storage_type != PAGE_STORAGE_SWAP_DISK);
+
+          spte->storage_type = PAGE_STORAGE_SWAP_DISK;
+        }
+      else
+        ASSERT (pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
+
+      *ssn_to_write = tssn;
+      *write_required = true;
+    }
+  else
+    {
+      /* Swap-out is not required because it is not modified from the source. */
+      /* For now, the page stored in the swap disk is up-to-date. */
+      /* Just reallocate it. */
+      ASSERT (pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
+
+      b = swap_disk_allocate(&fte->pg_id, &tssn, &prev_pg_id);
+
+      ASSERT (b && prev_pg_id.t == fte->pg_id.t && prev_pg_id.upage == fte->pg_id.upage);
+    }
+
+  /* Clear the present bit of the page table entry of the page that is being replaced. */
+  pagedir_clear_page (fte->pg_id.t->pagedir, fte->pg_id.upage);
+
+  return true;
+}
+
+/* LOGOS-ADDED FUNCTION
    Reaplace a existing user page to the user page represented by pg_id and return it. 
    Sometimes, some physical free memory pages for user can be available. 
    We allow this function called by only the process that is the owner of the page represented by pg_id. 
@@ -197,10 +264,6 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
 {
   void * kpage;
   struct vm_frame_table_entry *fte;
-  swap_slot_num_t tssn;
-  struct page_identifier prev_pg_id;
-  struct vm_sup_page_table_entry *spte;
-  bool b;
   struct lock temp_lock;
 
   bool write_required = false;
@@ -253,6 +316,7 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
   if (kpage == NULL)
     {
       /* No free page in the main memory. Replace a page. */
+      /* First, select a page to be replaced. */
       fte = vm_replacement_policy (pg_id);
       if (fte == NULL)
         {
@@ -268,62 +332,15 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
 	  kpage = pagedir_get_page (fte->pg_id.t->pagedir, fte->pg_id.upage);
 	  ASSERT (kpage != NULL);
 
-      /* First, check whether swap-out is required or not. */
-      if (pagedir_is_dirty (fte->pg_id.t->pagedir, fte->pg_id.upage))
+	  /* Prepare the page to swap out if necessary. */
+      if (!vm_prepare_to_swap_out_common (fte, &write_required, &ssn_to_write))
         {
-          /* If Swap-out is required, prepare to swap the old page out. */
-          b = swap_disk_allocate(&fte->pg_id, &tssn, &prev_pg_id);
-          if (!b)
-            {
-              ASSERT (0);
-			  lock_release (replaced_page_pagedir_lock);
-			  lock_release (&pg_id->t->pagedir_lock);
-			  lock_release (&vm_frame_table_lock);
-              return NULL;
-            }
-
-		  if (prev_pg_id.t != fte->pg_id.t || 
-			  prev_pg_id.upage != fte->pg_id.upage)
-            {
-              if (prev_pg_id.t != NULL)
-                {
-                  lock_acquire (&prev_pg_id.t->pagedir_lock);
-
-                  spte = pagedir_get_sup_page_table_entry (prev_pg_id.t->pagedir, prev_pg_id.upage);
-                  ASSERT (spte != NULL);
-
-                  spte->storage_type = PAGE_STORAGE_NONE;
-                  pagedir_set_dirty (prev_pg_id.t->pagedir, prev_pg_id.upage, true);
-
-				  lock_release (&prev_pg_id.t->pagedir_lock);
-                }
-
-              spte = pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage);
-			  ASSERT (spte != NULL);
-			  ASSERT (spte->storage_type != PAGE_STORAGE_SWAP_DISK);
-
-              spte->storage_type = PAGE_STORAGE_SWAP_DISK;
-            }
-		  else
-            ASSERT (pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
-
-          ssn_to_write = tssn;
-          write_required = true;
+          ASSERT (0);
+          lock_release (replaced_page_pagedir_lock);
+          lock_release (&pg_id->t->pagedir_lock);
+          lock_release (&vm_frame_table_lock);
+          return NULL;
         }
-	  else
-        {
-          /* Swap-out is not required because it is not modified from the source. */
-          /* For now, the page stored in the swap disk is up-to-date. */
-          /* Just reallocate it. */
-          ASSERT (pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
-
-          b = swap_disk_allocate(&fte->pg_id, &tssn, &prev_pg_id);
-
-          ASSERT (b && prev_pg_id.t == fte->pg_id.t && prev_pg_id.upage == fte->pg_id.upage);
-        }
-
-      /* Clear the present bit of the page table entry of the page that is being replaced. */
-      pagedir_clear_page (fte->pg_id.t->pagedir, fte->pg_id.upage);
 
       /* Set fte as the frame table entry of the requested page. */
       lock_acquire (&fte->change_lock);
@@ -336,7 +353,7 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
   lock_acquire (&fte->change_lock);
   lock_release (&vm_frame_table_lock);
   if (write_required)
-      swap_disk_store (tssn, kpage);
+      swap_disk_store (ssn_to_write, kpage);
   lock_release (replaced_page_pagedir_lock);
   swap_disk_load_and_release (pg_id, kpage);
   lock_release (&fte->change_lock);
@@ -357,9 +374,62 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
 */
 void *vm_request_new_user_page (void)
 {
-  /* TODO : Implement here correctly. */
-  /* Important : At the end, remove the page that will be returned from the memory frame table. */
-  return NULL;
+  void * kpage;
+  struct vm_frame_table_entry *fte;
+  struct page_identifier temp_pg_id;
+  struct lock temp_lock;
+
+  bool write_required = false;
+  swap_slot_num_t ssn_to_write;
+  struct lock* replaced_page_pagedir_lock;
+
+  /* Lock-related works. */
+  lock_init (&temp_lock);
+  replaced_page_pagedir_lock = &temp_lock;
+
+  lock_acquire (&vm_frame_table_lock);
+
+  /* Replace a page. */
+  /* First, select a page to be replaced. */
+  temp_pg_id.t = NULL;
+  temp_pg_id.upage = NULL;
+  fte = vm_replacement_policy (&temp_pg_id);
+  if (fte == NULL)
+    {
+      ASSERT (0);
+	  lock_release (&vm_frame_table_lock);
+      return NULL;
+    }
+
+  replaced_page_pagedir_lock = &fte->pg_id.t->pagedir_lock;
+  lock_acquire (replaced_page_pagedir_lock);
+
+  kpage = pagedir_get_page (fte->pg_id.t->pagedir, fte->pg_id.upage);
+  ASSERT (kpage != NULL);
+
+  /* Prepare the page to swap out if necessary. */
+  if (!vm_prepare_to_swap_out_common (fte, &write_required, &ssn_to_write))
+    {
+      ASSERT (0);
+      lock_release (replaced_page_pagedir_lock);
+      lock_release (&vm_frame_table_lock);
+      return NULL;
+    }
+
+  /* Remove the fte. */
+  lock_acquire (&fte->change_lock);
+  list_remove (&fte->elem);
+  lock_release (&fte->change_lock);
+  free (fte);
+
+  /* Swap out. */
+  lock_release (&vm_frame_table_lock);
+  if (write_required)
+      swap_disk_store (ssn_to_write, kpage);
+  lock_release (replaced_page_pagedir_lock);
+
+  /* Return the kernel address of the free page. */
+  return kpage;
 }
 
 /* LOGOS-ADDED FUNCTION
