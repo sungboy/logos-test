@@ -1,13 +1,5 @@
-#summary One-sentence summary of this page.
+= 공지 =
 
-= Introduction =
+1. 이번 보고서부터는 중요한 부분만 소스 코드를 첨부하기로 했죠? 맡은 부분 보고서 쓸 때 소스 코드도 중요한 부분 일부만 첨부해 주세요. (prj4_LOGOS_ex1.hwp 참조)
 
-Add your content here.
-
-
-= Details =
-
-Add your content here.  Format your content with:
-  * Text in *bold* or _italic_
-  * Headings, paragraphs, and lists
-  * Automatic links to other wiki pages
+2. 원활한 진행을 위해 저한테 연락을 자주 자주 주시면 감사 ㅋ
