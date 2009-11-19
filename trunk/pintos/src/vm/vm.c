@@ -17,8 +17,8 @@
 #include <kernel/list.h>
 #include <kernel/hash.h>
 
-static bool vm_add_new_fte (struct thread* t, void *upage);
-static void vm_set_all_thread_pages_nonpageable (struct thread* t);
+static struct vm_frame_table_entry *vm_add_new_fte (struct thread* t, void *upage, bool frame_table_lock_required);
+static void vm_set_all_thread_pages_nonpageable_internal (struct thread* t, bool frame_table_lock_required);
 static struct vm_frame_table_entry *vm_replacement_policy (const struct page_identifier *pg_id);
 
 struct lock vm_frame_table_lock; /* LOGOS-ADDED VARIABLE. Lock for the frame table. */
@@ -38,28 +38,34 @@ vm_init (void)
 void
 vm_free_all_thread_user_memory (struct thread* t)
 {
-  vm_set_all_thread_pages_nonpageable (t);
+  lock_acquire (&vm_frame_table_lock);
+  lock_acquire (&t->pagedir_lock);
+  vm_set_all_thread_pages_nonpageable_internal (t, false);
   swap_disk_release_thread (t);
+  lock_release (&t->pagedir_lock);
+  lock_release (&vm_frame_table_lock);
 }
 
 /* LOGOS-ADDED FUNCTION */
-static bool
-vm_add_new_fte (struct thread* t, void *upage)
+static struct vm_frame_table_entry *
+vm_add_new_fte (struct thread* t, void *upage, bool frame_table_lock_required)
 {
   /* Add a struct vm_frame_table_entry to vm_frame_table. */
   struct vm_frame_table_entry* fte = (struct vm_frame_table_entry*)malloc (sizeof (struct vm_frame_table_entry));
   if (fte == NULL)
-	  return false;
+	  return NULL;
 
   fte->pg_id.t = t;
   fte->pg_id.upage = upage;
   lock_init (&fte->change_lock);
 
-  lock_acquire (&vm_frame_table_lock);
+  if (frame_table_lock_required)
+    lock_acquire (&vm_frame_table_lock);
   list_push_back (&vm_frame_table, &fte->elem); 
-  lock_release (&vm_frame_table_lock);
+  if (frame_table_lock_required)
+    lock_release (&vm_frame_table_lock);
 
-  return true;
+  return fte;
 }
 
 /* LOGOS-ADDED FUNCTION
@@ -67,17 +73,18 @@ vm_add_new_fte (struct thread* t, void *upage)
 bool
 vm_set_page_pageable (struct thread* t, void *upage)
 {
-  return vm_add_new_fte(t, upage);
+  return vm_add_new_fte(t, upage, true) != NULL;
 }
 
 /* LOGOS-ADDED FUNCTION
    Set all pages of a thread nonpageable. */
 static void
-vm_set_all_thread_pages_nonpageable (struct thread* t)
+vm_set_all_thread_pages_nonpageable_internal (struct thread* t, bool frame_table_lock_required)
 {
   struct list_elem *e, *next;
 
-  lock_acquire (&vm_frame_table_lock);
+  if (frame_table_lock_required)
+    lock_acquire (&vm_frame_table_lock);
 
   for (e = list_begin (&vm_frame_table); e != list_end (&vm_frame_table);
        e = next)
@@ -95,7 +102,8 @@ vm_set_all_thread_pages_nonpageable (struct thread* t)
         }
     }
 
-  lock_release (&vm_frame_table_lock);
+  if (frame_table_lock_required)
+    lock_release (&vm_frame_table_lock);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -189,16 +197,18 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
 {
   void * kpage;
   struct vm_frame_table_entry *fte;
-  swap_slot_num_t ssn;
+  swap_slot_num_t tssn;
   struct page_identifier prev_pg_id;
   struct vm_sup_page_table_entry *spte;
   bool b;
+  struct lock temp_lock;
+
+  bool write_required = false;
+  swap_slot_num_t ssn_to_write;
+  struct lock* replaced_page_pagedir_lock;
 
   ASSERT (pg_id != NULL);
   ASSERT (pg_id->t != NULL);
-
-  /* The implementation of this function has not completed yet. */
-  return NULL;
 
   /* We allow this function called by only the process that is the owner of the page represented by pg_id. */
   ASSERT (thread_current () == pg_id->t);
@@ -210,38 +220,65 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
   if (!process_is_valid_user_virtual_address(pg_id->upage, 1, false) || pg_ofs(pg_id->upage)!=0)
     return NULL;
 
+  /* Try to get a free page using the palloc_*_without_vm function. */
+  kpage = palloc_get_page_without_vm (PAL_USER);
+
+  /* Lock-related works. */
+  lock_init (&temp_lock);
+  replaced_page_pagedir_lock = &temp_lock;
+
+  lock_acquire (&vm_frame_table_lock);
+  lock_acquire (&pg_id->t->pagedir_lock);
+
   ASSERT (pagedir_get_page (pg_id->t->pagedir, pg_id->upage) == NULL);
   ASSERT (pagedir_get_sup_page_table_entry (pg_id->t->pagedir, pg_id->upage) != NULL);
   ASSERT (pagedir_get_sup_page_table_entry (pg_id->t->pagedir, pg_id->upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
 
-  /* Try to get a free page using a palloc_*_without_vm function. */
-  kpage = palloc_get_page_without_vm (PAL_USER);
   if (kpage != NULL)
   {
       /* The palloc_*_without_vm function has suceeded. */
       /* Add a new frame table entry. */
-      if (!vm_add_new_fte (pg_id->t, pg_id->upage))
+	  fte = vm_add_new_fte (pg_id->t, pg_id->upage, false);
+      if (fte == NULL)
         {
           ASSERT (0);
+		  lock_release (&pg_id->t->pagedir_lock);
+		  lock_release (&vm_frame_table_lock);
 		  return NULL;
         }
+
+	  lock_acquire (replaced_page_pagedir_lock);
   }
 
   if (kpage == NULL)
     {
       /* No free page in the main memory. Replace a page. */
       fte = vm_replacement_policy (pg_id);
+      if (fte == NULL)
+        {
+          ASSERT (0);
+		  lock_release (&pg_id->t->pagedir_lock);
+		  lock_release (&vm_frame_table_lock);
+          return NULL;
+        }
+
+	  replaced_page_pagedir_lock = &fte->pg_id.t->pagedir_lock;
+      lock_acquire (replaced_page_pagedir_lock);
+
 	  kpage = pagedir_get_page (fte->pg_id.t->pagedir, fte->pg_id.upage);
 	  ASSERT (kpage != NULL);
 
       /* First, check whether swap-out is required or not. */
       if (pagedir_is_dirty (fte->pg_id.t->pagedir, fte->pg_id.upage))
         {
-          /* If Swap-out is required, swap the old page out. */
-          b = swap_disk_allocate(&fte->pg_id, &ssn, &prev_pg_id);
+          /* If Swap-out is required, prepare to swap the old page out. */
+          b = swap_disk_allocate(&fte->pg_id, &tssn, &prev_pg_id);
           if (!b)
             {
               ASSERT (0);
+			  lock_release (replaced_page_pagedir_lock);
+			  lock_release (&pg_id->t->pagedir_lock);
+			  lock_release (&vm_frame_table_lock);
               return NULL;
             }
 
@@ -250,11 +287,15 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
             {
               if (prev_pg_id.t != NULL)
                 {
+                  lock_acquire (&prev_pg_id.t->pagedir_lock);
+
                   spte = pagedir_get_sup_page_table_entry (prev_pg_id.t->pagedir, prev_pg_id.upage);
                   ASSERT (spte != NULL);
 
                   spte->storage_type = PAGE_STORAGE_NONE;
                   pagedir_set_dirty (prev_pg_id.t->pagedir, prev_pg_id.upage, true);
+
+				  lock_release (&prev_pg_id.t->pagedir_lock);
                 }
 
               spte = pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage);
@@ -266,30 +307,46 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
 		  else
             ASSERT (pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
 
-          swap_disk_store (ssn, kpage);
+          ssn_to_write = tssn;
+          write_required = true;
         }
 	  else
         {
           /* Swap-out is not required because it is not modified from the source. */
           /* For now, the page stored in the swap disk is up-to-date. */
           /* Just reallocate it. */
-          b = swap_disk_allocate(&fte->pg_id, &ssn, &prev_pg_id);
+          ASSERT (pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
+
+          b = swap_disk_allocate(&fte->pg_id, &tssn, &prev_pg_id);
+
           ASSERT (b && prev_pg_id.t == fte->pg_id.t && prev_pg_id.upage == fte->pg_id.upage);
-		  ASSERT (pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
         }
 
-        /* Set fte as the frame table entry of the requested page. */
-	    fte->pg_id.t = pg_id->t;
-		fte->pg_id.upage = pg_id->upage;
+      /* Clear the present bit of the page table entry of the page that is being replaced. */
+      pagedir_clear_page (fte->pg_id.t->pagedir, fte->pg_id.upage);
+
+      /* Set fte as the frame table entry of the requested page. */
+      lock_acquire (&fte->change_lock);
+      fte->pg_id.t = pg_id->t;
+      fte->pg_id.upage = pg_id->upage;
+      lock_release (&fte->change_lock);
     }
 
-  /* Swap the requested page in. */
+  /* Swap out/in. */
+  lock_acquire (&fte->change_lock);
+  lock_release (&vm_frame_table_lock);
+  if (write_required)
+      swap_disk_store (tssn, kpage);
+  lock_release (replaced_page_pagedir_lock);
   swap_disk_load_and_release (pg_id, kpage);
+  lock_release (&fte->change_lock);
 
   /* Set the page table. */
   pagedir_set_dirty (pg_id->t->pagedir, pg_id->upage, false);
   pagedir_set_accessed (pg_id->t->pagedir, pg_id->upage, true);
   pagedir_set_page (pg_id->t->pagedir, pg_id->upage, kpage, pagedir_is_writable (pg_id->t->pagedir, pg_id->upage));
+
+  lock_release (&pg_id->t->pagedir_lock);
 
   /* Return the kernel address that the requested page is located. */
   return kpage;
