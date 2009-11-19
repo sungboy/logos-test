@@ -31,4 +31,8 @@ int process_get_filesize(struct thread* t, int fd);
 void process_seek_file(struct thread* t, int fd, unsigned position);
 unsigned process_tell_file(struct thread* t, int fd);
 
+#ifdef VM
+bool install_page (void *upage, void *kpage, bool writable);
+#endif
+
 #endif /* userprog/process.h */
