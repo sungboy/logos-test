@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "threads/synch.h"
 #include "threads/palloc.h"
@@ -16,6 +17,7 @@
 #include <kernel/list.h>
 #include <kernel/hash.h>
 
+static bool vm_add_new_fte (struct thread* t, void *upage);
 static void vm_set_all_thread_pages_nonpageable (struct thread* t);
 static struct vm_frame_table_entry *vm_replacement_policy (const struct page_identifier *pg_id);
 
@@ -40,12 +42,11 @@ vm_free_all_thread_user_memory (struct thread* t)
   swap_disk_release_thread (t);
 }
 
-/* LOGOS-ADDED FUNCTION
-   Set a user virtual page pagable. */
-bool
-vm_set_page_pageable (struct thread* t, void *upage)
+/* LOGOS-ADDED FUNCTION */
+static bool
+vm_add_new_fte (struct thread* t, void *upage)
 {
-  // Add a struct vm_frame_table_entry to vm_frame_table;
+  /* Add a struct vm_frame_table_entry to vm_frame_table. */
   struct vm_frame_table_entry* fte = (struct vm_frame_table_entry*)malloc (sizeof (struct vm_frame_table_entry));
   if (fte == NULL)
 	  return false;
@@ -59,6 +60,14 @@ vm_set_page_pageable (struct thread* t, void *upage)
   lock_release (&vm_frame_table_lock);
 
   return true;
+}
+
+/* LOGOS-ADDED FUNCTION
+   Set a user virtual page pagable. */
+bool
+vm_set_page_pageable (struct thread* t, void *upage)
+{
+  return vm_add_new_fte(t, upage);
 }
 
 /* LOGOS-ADDED FUNCTION
@@ -174,12 +183,116 @@ vm_destroy_sup_page_table (struct hash *spd)
 /* LOGOS-ADDED FUNCTION
    Reaplace a existing user page to the user page represented by pg_id and return it. 
    Sometimes, some physical free memory pages for user can be available. 
+   We allow this function called by only the process that is the owner of the page represented by pg_id. 
 */
 void *vm_request_user_page (const struct page_identifier* pg_id)
 {
-  /* TODO : Implement here correctly. */
-  /* Important : Check pg_id is correct. */
+  void * kpage;
+  struct vm_frame_table_entry *fte;
+  swap_slot_num_t ssn;
+  struct page_identifier prev_pg_id;
+  struct vm_sup_page_table_entry *spte;
+  bool b;
+
+  ASSERT (pg_id != NULL);
+  ASSERT (pg_id->t != NULL);
+
+  /* The implementation of this function has not completed yet. */
   return NULL;
+
+  /* We allow this function called by only the process that is the owner of the page represented by pg_id. */
+  ASSERT (thread_current () == pg_id->t);
+
+  /* Check whether pg_id is correct or not. */
+  if (pg_id->upage == NULL)
+    return NULL;
+
+  if (!process_is_valid_user_virtual_address(pg_id->upage, 1, false) || pg_ofs(pg_id->upage)!=0)
+    return NULL;
+
+  ASSERT (pagedir_get_page (pg_id->t->pagedir, pg_id->upage) == NULL);
+  ASSERT (pagedir_get_sup_page_table_entry (pg_id->t->pagedir, pg_id->upage) != NULL);
+  ASSERT (pagedir_get_sup_page_table_entry (pg_id->t->pagedir, pg_id->upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
+
+  /* Try to get a free page using a palloc_*_without_vm function. */
+  kpage = palloc_get_page_without_vm (PAL_USER);
+  if (kpage != NULL)
+  {
+      /* The palloc_*_without_vm function has suceeded. */
+      /* Add a new frame table entry. */
+      if (!vm_add_new_fte (pg_id->t, pg_id->upage))
+        {
+          ASSERT (0);
+		  return NULL;
+        }
+  }
+
+  if (kpage == NULL)
+    {
+      /* No free page in the main memory. Replace a page. */
+      fte = vm_replacement_policy (pg_id);
+	  kpage = pagedir_get_page (fte->pg_id.t->pagedir, fte->pg_id.upage);
+	  ASSERT (kpage != NULL);
+
+      /* First, check whether swap-out is required or not. */
+      if (pagedir_is_dirty (fte->pg_id.t->pagedir, fte->pg_id.upage))
+        {
+          /* If Swap-out is required, swap the old page out. */
+          b = swap_disk_allocate(&fte->pg_id, &ssn, &prev_pg_id);
+          if (!b)
+            {
+              ASSERT (0);
+              return NULL;
+            }
+
+		  if (prev_pg_id.t != fte->pg_id.t || 
+			  prev_pg_id.upage != fte->pg_id.upage)
+            {
+              if (prev_pg_id.t != NULL)
+                {
+                  spte = pagedir_get_sup_page_table_entry (prev_pg_id.t->pagedir, prev_pg_id.upage);
+                  ASSERT (spte != NULL);
+
+                  spte->storage_type = PAGE_STORAGE_NONE;
+                  pagedir_set_dirty (prev_pg_id.t->pagedir, prev_pg_id.upage, true);
+                }
+
+              spte = pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage);
+			  ASSERT (spte != NULL);
+			  ASSERT (spte->storage_type != PAGE_STORAGE_SWAP_DISK);
+
+              spte->storage_type = PAGE_STORAGE_SWAP_DISK;
+            }
+		  else
+            ASSERT (pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
+
+          swap_disk_store (ssn, kpage);
+        }
+	  else
+        {
+          /* Swap-out is not required because it is not modified from the source. */
+          /* For now, the page stored in the swap disk is up-to-date. */
+          /* Just reallocate it. */
+          b = swap_disk_allocate(&fte->pg_id, &ssn, &prev_pg_id);
+          ASSERT (b && prev_pg_id.t == fte->pg_id.t && prev_pg_id.upage == fte->pg_id.upage);
+		  ASSERT (pagedir_get_sup_page_table_entry (fte->pg_id.t->pagedir, fte->pg_id.upage)->storage_type == PAGE_STORAGE_SWAP_DISK);
+        }
+
+        /* Set fte as the frame table entry of the requested page. */
+	    fte->pg_id.t = pg_id->t;
+		fte->pg_id.upage = pg_id->upage;
+    }
+
+  /* Swap the requested page in. */
+  swap_disk_load_and_release (pg_id, kpage);
+
+  /* Set the page table. */
+  pagedir_set_dirty (pg_id->t->pagedir, pg_id->upage, false);
+  pagedir_set_accessed (pg_id->t->pagedir, pg_id->upage, true);
+  pagedir_set_page (pg_id->t->pagedir, pg_id->upage, kpage, pagedir_is_writable (pg_id->t->pagedir, pg_id->upage));
+
+  /* Return the kernel address that the requested page is located. */
+  return kpage;
 }
 
 /* LOGOS-ADDED FUNCTION
@@ -208,7 +321,7 @@ struct vm_frame_table_entry *clock_hand;
    Select a page in memory to be replaced. 
 */
 static struct vm_frame_table_entry *
-vm_replacement_policy (const struct page_identifier *pg_id)
+vm_replacement_policy (const struct page_identifier *pg_id UNUSED)
 {
   /* From Dongmin To Team Member : My part has not completed yet, but I think it is possible to implement this function using the data structures I made. 
      The paramter pg_id is the page identifier that represent the page we want to load. pg_id.t is NULL if the page is a new page. 
