@@ -201,6 +201,9 @@ bool vm_try_stack_growth (const struct page_identifier* pg_id)
   return false;
 }
 
+/* LOGOS-ADDED VARIABLE */
+struct vm_frame_table_entry *clock_hand;
+
 /* LOGOS-ADDED FUNCTION
    Select a page in memory to be replaced. 
 */
@@ -218,9 +221,28 @@ vm_replacement_policy (const struct page_identifier *pg_id)
      I think you have to add some external variables such as a clock hand.
      Implement the clock algorithm and return the pointer of struct vm_frame_table_entry representing the page you want to replace. 
      */
+
   /* TODO : Modify this function to run the clock algorithm correctly. */
   if (list_empty (&vm_frame_table))
     return NULL;
 
-  return list_entry (list_begin (&vm_frame_table), struct vm_frame_table_entry, elem);
+  while (pagedir_is_accessed (clock_hand->pg_id.t->pagedir, clock_hand->pg_id.upage))
+    {
+      // set use bit 0
+      pagedir_set_accessed (clock_hand->pg_id.t->pagedir, clock_hand->pg_id.upage, false);
+
+      // move clock hand to next
+
+      if (list_entry (list_end (&vm_frame_table), struct vm_frame_table_entry, elem) == clock_hand)
+        clock_hand = list_entry (list_head (&vm_frame_table), struct vm_frame_table_entry, elem);
+      else
+        clock_hand = list_entry (list_next (&clock_hand->elem), struct vm_frame_table_entry, elem);
+    }
+
+  // found unused page
+
+  // set clock hand next to the page will be replaced
+  clock_hand = list_entry (list_next (&clock_hand->elem), struct vm_frame_table_entry, elem);  
+  
+  return list_entry (list_prev (&clock_hand->elem), struct vm_frame_table_entry, elem);
 }
