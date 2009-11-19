@@ -123,6 +123,11 @@ struct thread
 #endif
     pagedir_t pagedir;                  /* Page directory. */
 
+#ifdef VM
+	void* stack_allocated_lower;        /* LOGOS-ADDED VARIABLE. */
+    void* stack_allocation_limit;       /* LOGOS-ADDED VARIABLE. */
+#endif
+
 	/* Owned by userprog/process.c. */
 	/* LOGOS-ADDED VARIABLE START */
     bool is_user_process;                   /* Whether this thread is for user process or not. Can't be changed. */

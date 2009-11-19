@@ -435,10 +435,51 @@ void *vm_request_new_user_page (void)
 /* LOGOS-ADDED FUNCTION
    Try to make the stack grow to cover the page represented by pg_id. 
 */
-bool vm_try_stack_growth (const struct page_identifier* pg_id)
+bool vm_try_stack_growth (const struct page_identifier* pg_id, void *esp)
 {
-  /* TODO : Implement here correctly. */
-  return false;
+  struct thread *t = thread_current ();
+  void *kpage;
+  bool b;
+
+  /* We allow this function called by only the process that is the owner of the page represented by pg_id. */
+  ASSERT (thread_current () == pg_id->t);
+
+  /* Check whether pg_id is correct or not. */
+  if (pg_id->upage == NULL)
+    return false;
+
+  if (!process_is_valid_user_virtual_address(pg_id->upage, 1, false) || pg_ofs(pg_id->upage)!=0)
+    return false;
+
+  /* Check whether the address is mapped or not. */
+  lock_acquire (&pg_id->t->pagedir_lock);
+  b = pagedir_exist (pg_id->t->pagedir, pg_id->upage);
+  lock_release (&pg_id->t->pagedir_lock);
+
+  if (b)
+    return false;
+
+  /* Check the stack limit and esp. */
+  b = false;
+  if (t->stack_allocated_lower <= pg_id->upage && pg_id->upage < PHYS_BASE)
+    b = true;
+
+  if (esp <= pg_id->upage && t->stack_allocation_limit <= pg_id->upage && pg_id->upage < PHYS_BASE)
+	b = true;
+
+  if (!b)
+    return false;
+
+  /* Allocate a page for the stack and return. */
+  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  if (kpage == NULL)
+    return false;
+
+  b = install_page (pg_id->upage, kpage, true);
+  if (!b)
+    palloc_free_page (kpage);
+
+  return b;
 }
 
 /* LOGOS-ADDED VARIABLE */

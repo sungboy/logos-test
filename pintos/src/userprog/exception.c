@@ -157,7 +157,7 @@ page_fault (struct intr_frame *f)
     {
       struct page_identifier pg_id;
       pg_id.t = thread_current ();
-	  pg_id.upage = fault_addr;
+	  pg_id.upage = pg_round_down (fault_addr);
 
       /* Try to load the user page not in physical memory now. */
       if (is_error)
@@ -165,7 +165,7 @@ page_fault (struct intr_frame *f)
 
       /* Try to make the stack grow if the fault address is in the stack area. */
       if (is_error)
-        is_error = !vm_try_stack_growth (&pg_id);
+        is_error = !vm_try_stack_growth (&pg_id, f->esp);
     }
 #endif
 

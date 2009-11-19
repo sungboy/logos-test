@@ -60,6 +60,10 @@ execute_thread (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+#ifdef VM
+  thread_current ()->stack_allocation_limit = 0;
+#endif
+
   /* LOGOS-ADDED parsing arguments */
 
   char **argv = malloc (sizeof (char*));
@@ -466,6 +470,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
+#ifdef VM
+			  ASSERT ((mem_page + read_bytes + zero_bytes) % PGSIZE == 0);
+              if (thread_current ()->stack_allocation_limit < ((void*)mem_page) + read_bytes + zero_bytes)
+                thread_current ()->stack_allocation_limit = ((void*)mem_page) + read_bytes + zero_bytes;
+#endif
               if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
@@ -492,7 +501,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
+bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -606,6 +615,10 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
+#ifdef VM
+  thread_current ()->stack_allocated_lower = PHYS_BASE - PGSIZE;
+#endif
+
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
@@ -627,7 +640,7 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
