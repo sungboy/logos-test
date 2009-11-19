@@ -226,6 +226,9 @@ vm_replacement_policy (const struct page_identifier *pg_id)
   if (list_empty (&vm_frame_table))
     return NULL;
 
+  if (!clock_hand)
+    clock_hand = list_entry (list_head (&vm_frame_table), struct vm_frame_table_entry, elem);
+
   while (pagedir_is_accessed (clock_hand->pg_id.t->pagedir, clock_hand->pg_id.upage))
     {
       // set use bit 0
