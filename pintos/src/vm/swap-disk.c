@@ -167,7 +167,7 @@ swap_disk_store (swap_slot_num_t ssn, void* kpage)
 
 /* LOGOS-ADDED FUNCTION */
 void
-swap_disk_load (const struct page_identifier *pg_id, void* kpage)
+swap_disk_load_and_release (const struct page_identifier *pg_id, void* kpage)
 {
   swap_slot_num_t ssn;
   disk_sector_t dsn;

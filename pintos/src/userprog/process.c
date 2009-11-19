@@ -655,6 +655,11 @@ install_page (void *upage, void *kpage, bool writable)
     }
 
 #ifdef VM
+  pagedir_set_dirty (t->pagedir, upage, true); /* The page first loaded must be written when it is requested to be replaced. */
+  pagedir_set_accessed (t->pagedir, upage, true); /* For the clock algorithm, we set this page accessed. */
+#endif
+
+#ifdef VM
   /* Make the page pageable. */
   if (!vm_set_page_pageable (t, upage))
     {
