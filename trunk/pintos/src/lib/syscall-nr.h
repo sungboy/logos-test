@@ -30,6 +30,9 @@ enum
     SYS_ISDIR,                  /* Tests if a fd represents a directory. */
     SYS_INUMBER,                /* Returns the inode number for a fd. */
 
+	/* For test. */
+	SYS_LRU_TEST_START,         /* LOGOS-ADDED. Start the LRU test. */
+
 	/* Add new system call here */
 
 	/* LOGOS-ADDED
