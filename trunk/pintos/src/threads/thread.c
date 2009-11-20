@@ -137,7 +137,7 @@ thread_init (void)
 
 #ifdef USERPROG
 #ifdef VM
-  lock_init (&initial_thread->pagedir_lock);
+  lock_init_as_recursive_lock (&initial_thread->pagedir_lock);
 #endif
 
   lock_init (&thread_relation_lock);
@@ -342,7 +342,7 @@ thread_create_internal (const char *name, int priority,
 #ifdef USERPROG
   /* Initialize some variables for user process. */
 #ifdef VM
-  lock_init (&t->pagedir_lock);
+  lock_init_as_recursive_lock (&t->pagedir_lock);
 #endif
 
   if(for_kernel_only)
