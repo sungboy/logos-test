@@ -614,7 +614,7 @@ vm_replacement_policy (const struct page_identifier *pg_id)
 
   /* Print Debug Info. */
   if (vm_verbose)
-	  printf ("Clock Algorithm : The page %x of thread %x is being replaced. \n", ret->pg_id.upage, ret->pg_id.t);
+	  printf ("Clock Algorithm : The page %x of thread %x is being replaced. \n", (unsigned int)ret->pg_id.upage, (unsigned int)ret->pg_id.t);
   
   return ret;
 }
