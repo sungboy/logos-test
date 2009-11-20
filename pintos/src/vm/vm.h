@@ -17,6 +17,6 @@ bool vm_set_page_pageable (struct thread* t, void *upage);
 void *vm_request_user_page (const struct page_identifier* pg_id);
 void *vm_request_new_user_page (void);
 
-bool vm_try_stack_growth (const struct page_identifier* pg_id, void *esp);
+bool vm_try_stack_growth (struct thread* t, void* fault_addr, void *esp);
 
 #endif /* vm/vm.h */

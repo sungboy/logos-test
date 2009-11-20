@@ -165,7 +165,7 @@ page_fault (struct intr_frame *f)
 
       /* Try to make the stack grow if the fault address is in the stack area. */
       if (is_error)
-        is_error = !vm_try_stack_growth (&pg_id, f->esp);
+        is_error = !vm_try_stack_growth (thread_current (), fault_addr, f->esp);
     }
 #endif
 
