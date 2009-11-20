@@ -43,6 +43,11 @@ struct pool kernel_pool, user_pool;
 /* Maximum number of pages to put in user pool. */
 size_t user_page_limit = SIZE_MAX;
 
+#ifdef VM
+/* LOGOS-ADDED VARIABLES */
+static bool deny_user_alloc;
+#endif
+
 static void init_pool (struct pool *, void *base, size_t page_cnt,
                        const char *name);
 static bool page_from_pool (const struct pool *, void *page);
@@ -69,6 +74,10 @@ palloc_init (void)
   init_pool (&kernel_pool, free_start, kernel_pages, "kernel pool");
   init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
              user_pages, "user pool");
+
+#ifdef VM
+  deny_user_alloc = false;
+#endif
 }
 
 /* LOGOS-ADDED FUNCTION
@@ -89,7 +98,18 @@ palloc_get_multiple_internal (enum palloc_flags flags, size_t page_cnt, bool all
     return NULL;
 
   lock_acquire (&pool->lock);
-  page_idx = bitmap_scan_and_flip (pool->used_map, 0, page_cnt, false);
+#ifdef VM
+  if (!deny_user_alloc || !(flags & PAL_USER))
+    {
+#endif
+      page_idx = bitmap_scan_and_flip (pool->used_map, 0, page_cnt, false);
+#ifdef VM
+    }
+  else
+    {
+      page_idx = BITMAP_ERROR;
+    }
+#endif
   lock_release (&pool->lock);
 
   if (page_idx != BITMAP_ERROR)
@@ -173,6 +193,15 @@ void *
 palloc_get_page_without_vm (enum palloc_flags flags) 
 {
   return palloc_get_multiple_internal (flags, 1, false);
+}
+
+/* LOGOS-ADDED FUNCTION */
+void *
+palloc_deny_user_allocation (bool deny)
+{
+  lock_acquire (&user_pool.lock);
+  deny_user_alloc = deny;
+  lock_release (&user_pool.lock);
 }
 #endif
 
