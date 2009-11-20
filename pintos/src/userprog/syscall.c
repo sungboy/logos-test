@@ -11,26 +11,26 @@
 
 static void syscall_handler (struct intr_frame *);
 
-static void sys_halt (void);
-static void sys_exit (int status) NO_RETURN;
-static pid_t sys_exec (const char *file);
-static int sys_wait (pid_t pid);
-static bool sys_create (const char *file, unsigned initial_size);
-static bool sys_remove (const char *file);
-static int sys_open (const char *file);
-static int sys_filesize (int fd);
-static int sys_read (int fd, void *buffer, unsigned size);
-static int sys_write (int fd, const void *buffer, unsigned size);
-static void sys_seek (int fd, unsigned position);
-static unsigned sys_tell (int fd);
-static void sys_close (int fd);
-static mapid_t sys_mmap (int fd, void *addr);
-static void sys_munmap (mapid_t mapid);
-static bool sys_chdir (const char *dir);
-static bool sys_mkdir (const char *dir);
-static bool sys_readdir (int fd, char name[READDIR_MAX_LEN + 1]);
-static bool sys_isdir (int fd);
-static int sys_inumber (int fd);
+static void sys_halt (struct intr_frame *f);
+static void sys_exit (struct intr_frame *f, int status) NO_RETURN;
+static pid_t sys_exec (struct intr_frame *f, const char *file);
+static int sys_wait (struct intr_frame *f, pid_t pid);
+static bool sys_create (struct intr_frame *f, const char *file, unsigned initial_size);
+static bool sys_remove (struct intr_frame *f, const char *file);
+static int sys_open (struct intr_frame *f, const char *file);
+static int sys_filesize (struct intr_frame *f, int fd);
+static int sys_read (struct intr_frame *f, int fd, void *buffer, unsigned size);
+static int sys_write (struct intr_frame *f, int fd, const void *buffer, unsigned size);
+static void sys_seek (struct intr_frame *f, int fd, unsigned position);
+static unsigned sys_tell (struct intr_frame *f, int fd);
+static void sys_close (struct intr_frame *f, int fd);
+static mapid_t sys_mmap (struct intr_frame *f, int fd, void *addr);
+static void sys_munmap (struct intr_frame *f, mapid_t mapid);
+static bool sys_chdir (struct intr_frame *f, const char *dir);
+static bool sys_mkdir (struct intr_frame *f, const char *dir);
+static bool sys_readdir (struct intr_frame *f, int fd, char name[READDIR_MAX_LEN + 1]);
+static bool sys_isdir (struct intr_frame *f, int fd);
+static int sys_inumber (struct intr_frame *f, int fd);
 
 void
 syscall_init (void) 
@@ -157,7 +157,7 @@ syscall_handler (struct intr_frame *f)
 
   int i;
 
-  if (!process_is_valid_user_virtual_address (f->esp, sizeof(int), false))
+  if (!process_is_valid_user_virtual_address (f->esp, sizeof(int), false, f->esp))
     {
       printf("Invalid System Call : Invalid ESP. \n");
 	  thread_exit_with_exit_code (-1);
@@ -174,7 +174,7 @@ syscall_handler (struct intr_frame *f)
 
   for(i=0; i<arg_no[syscall_num]; i++)
     {
-	  if (!process_is_valid_user_virtual_address (((uint32_t*)f->esp) + 1 + i, sizeof(int), false))
+	  if (!process_is_valid_user_virtual_address (((uint32_t*)f->esp) + 1 + i, sizeof(int), false, f->esp))
 	    {
           printf("Invalid System Call : Invalid Argument %d. \n", i);
 	  	  thread_exit_with_exit_code (-1);
@@ -187,27 +187,27 @@ syscall_handler (struct intr_frame *f)
     {
     case 0:
       if(syscall_func_ret[syscall_num])
-        ret = ( (uint32_t (*) (void))syscall_func[syscall_num] ) ();
+        ret = ( (uint32_t (*) (struct intr_frame *))syscall_func[syscall_num] ) (f);
 	  else
-        ( (void (*) (void))syscall_func[syscall_num] ) ();
+        ( (void (*) (struct intr_frame *))syscall_func[syscall_num] ) (f);
       break;
     case 1:
       if(syscall_func_ret[syscall_num])
-        ret = ( (uint32_t (*) (uint32_t))syscall_func[syscall_num] ) (arg[0]);
+        ret = ( (uint32_t (*) (struct intr_frame *, uint32_t))syscall_func[syscall_num] ) (f, arg[0]);
 	  else
-        ( (void (*) (uint32_t))syscall_func[syscall_num] ) (arg[0]);
+        ( (void (*) (struct intr_frame *, uint32_t))syscall_func[syscall_num] ) (f, arg[0]);
       break;
     case 2:
       if(syscall_func_ret[syscall_num])
-        ret = ( (uint32_t (*) (uint32_t, uint32_t))syscall_func[syscall_num] ) (arg[0], arg[1]);
+        ret = ( (uint32_t (*) (struct intr_frame *, uint32_t, uint32_t))syscall_func[syscall_num] ) (f, arg[0], arg[1]);
 	  else
-        ( (void (*) (uint32_t, uint32_t))syscall_func[syscall_num] ) (arg[0], arg[1]);
+        ( (void (*) (struct intr_frame *, uint32_t, uint32_t))syscall_func[syscall_num] ) (f, arg[0], arg[1]);
       break;
     case 3:
       if(syscall_func_ret[syscall_num])
-        ret = ( (uint32_t (*) (uint32_t, uint32_t, uint32_t))syscall_func[syscall_num] ) (arg[0], arg[1], arg[2]);
+        ret = ( (uint32_t (*) (struct intr_frame *, uint32_t, uint32_t, uint32_t))syscall_func[syscall_num] ) (f, arg[0], arg[1], arg[2]);
 	  else
-        ( (void (*) (uint32_t, uint32_t, uint32_t))syscall_func[syscall_num] ) (arg[0], arg[1], arg[2]); 
+        ( (void (*) (struct intr_frame *, uint32_t, uint32_t, uint32_t))syscall_func[syscall_num] ) (f, arg[0], arg[1], arg[2]); 
       break;
     default:
       ASSERT(0);
@@ -220,7 +220,7 @@ syscall_handler (struct intr_frame *f)
 
 /* LOGOS-ADDED FUNCTION */
 static void
-sys_halt (void) 
+sys_halt (struct intr_frame *f UNUSED) 
 {
   /* The Relevant user code is as follows. */
   /* syscall0 (SYS_HALT); */
@@ -232,7 +232,7 @@ sys_halt (void)
 
 /* LOGOS-ADDED FUNCTION */
 static void
-sys_exit (int status)
+sys_exit (struct intr_frame *f UNUSED, int status)
 {
   /* The Relevant user code is as follows. */
   /* syscall1 (SYS_EXIT, status); */
@@ -245,12 +245,12 @@ sys_exit (int status)
 
 /* LOGOS-ADDED FUNCTION */
 static pid_t
-sys_exec (const char *file)
+sys_exec (struct intr_frame *f, const char *file)
 {
   /* The Relevant user code is as follows. */
   /* return (pid_t) syscall1 (SYS_EXEC, file); */
 
-  if (!process_is_valid_user_virtual_address_for_string_read (file))
+  if (!process_is_valid_user_virtual_address_for_string_read (file, f->esp))
 	{
       printf("Invalid System Call(sys_exec) : Invalid File Name String Address. \n");
       thread_exit_with_exit_code (-1);
@@ -261,7 +261,7 @@ sys_exec (const char *file)
 
 /* LOGOS-ADDED FUNCTION */
 static int
-sys_wait (pid_t pid)
+sys_wait (struct intr_frame *f UNUSED, pid_t pid)
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_WAIT, pid); */
@@ -271,12 +271,12 @@ sys_wait (pid_t pid)
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-sys_create (const char *file, unsigned initial_size)
+sys_create (struct intr_frame *f, const char *file, unsigned initial_size)
 {
   /* The Relevant user code is as follows. */
   /* return syscall2 (SYS_CREATE, file, initial_size); */
 
-  if (!process_is_valid_user_virtual_address_for_string_read (file))
+  if (!process_is_valid_user_virtual_address_for_string_read (file, f->esp))
 	{
       printf("Invalid System Call(sys_create) : Invalid File Name String Address. \n");
       thread_exit_with_exit_code (-1);
@@ -287,12 +287,12 @@ sys_create (const char *file, unsigned initial_size)
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-sys_remove (const char *file)
+sys_remove (struct intr_frame *f, const char *file)
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_REMOVE, file); */
 
-  if (!process_is_valid_user_virtual_address_for_string_read (file))
+  if (!process_is_valid_user_virtual_address_for_string_read (file, f->esp))
 	{
       printf("Invalid System Call(sys_remove) : Invalid File Name String Address. \n");
       thread_exit_with_exit_code (-1);
@@ -303,12 +303,12 @@ sys_remove (const char *file)
 
 /* LOGOS-ADDED FUNCTION */
 static int
-sys_open (const char *file)
+sys_open (struct intr_frame *f, const char *file)
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_OPEN, file); */
 
-  if (!process_is_valid_user_virtual_address_for_string_read (file))
+  if (!process_is_valid_user_virtual_address_for_string_read (file, f->esp))
 	{
       printf("Invalid System Call(sys_open) : Invalid File Name String Address. \n");
       thread_exit_with_exit_code (-1);
@@ -319,7 +319,7 @@ sys_open (const char *file)
 
 /* LOGOS-ADDED FUNCTION */
 static int
-sys_filesize (int fd) 
+sys_filesize (struct intr_frame *f UNUSED, int fd) 
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_FILESIZE, fd); */
@@ -329,14 +329,14 @@ sys_filesize (int fd)
 
 /* LOGOS-ADDED FUNCTION */
 static int
-sys_read (int fd, void *buffer, unsigned size)
+sys_read (struct intr_frame *f, int fd, void *buffer, unsigned size)
 {
   /* The Relevant user code is as follows. */
   /* return syscall3 (SYS_READ, fd, buffer, size); */
 
   unsigned ui;
 
-  if (!process_is_valid_user_virtual_address (buffer, size, true))
+  if (!process_is_valid_user_virtual_address (buffer, size, true, f->esp))
 	{
       printf("Invalid System Call(sys_read) : Invalid Buffer. \n");
       thread_exit_with_exit_code (-1);
@@ -365,12 +365,12 @@ sys_read (int fd, void *buffer, unsigned size)
 
 /* LOGOS-ADDED FUNCTION */
 static int
-sys_write (int fd, const void *buffer, unsigned size)
+sys_write (struct intr_frame *f, int fd, const void *buffer, unsigned size)
 {
   /* The Relevant user code is as follows. */
   /* return syscall3 (SYS_WRITE, fd, buffer, size); */
 
-  if (!process_is_valid_user_virtual_address (buffer, size, false))
+  if (!process_is_valid_user_virtual_address (buffer, size, false, f->esp))
 	{
       printf("Invalid System Call(sys_write) : Invalid Buffer. \n");
       thread_exit_with_exit_code (-1);
@@ -398,7 +398,7 @@ sys_write (int fd, const void *buffer, unsigned size)
 
 /* LOGOS-ADDED FUNCTION */
 static void
-sys_seek (int fd, unsigned position) 
+sys_seek (struct intr_frame *f UNUSED, int fd, unsigned position) 
 {
   /* The Relevant user code is as follows. */
   /* syscall2 (SYS_SEEK, fd, position); */
@@ -408,7 +408,7 @@ sys_seek (int fd, unsigned position)
 
 /* LOGOS-ADDED FUNCTION */
 static unsigned
-sys_tell (int fd) 
+sys_tell (struct intr_frame *f UNUSED, int fd) 
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_TELL, fd); */
@@ -418,7 +418,7 @@ sys_tell (int fd)
 
 /* LOGOS-ADDED FUNCTION */
 static void
-sys_close (int fd)
+sys_close (struct intr_frame *f UNUSED, int fd)
 {
   /* The Relevant user code is as follows. */
   /* syscall1 (SYS_CLOSE, fd); */
@@ -428,7 +428,7 @@ sys_close (int fd)
 
 /* LOGOS-ADDED FUNCTION */
 static mapid_t
-sys_mmap (int fd UNUSED, void *addrv UNUSED)
+sys_mmap (struct intr_frame *f UNUSED, int fd UNUSED, void *addrv UNUSED)
 {
   /* The Relevant user code is as follows. */
   /* return syscall2 (SYS_MMAP, fd, addr); */
@@ -440,7 +440,7 @@ sys_mmap (int fd UNUSED, void *addrv UNUSED)
 
 /* LOGOS-ADDED FUNCTION */
 static void
-sys_munmap (mapid_t mapid UNUSED)
+sys_munmap (struct intr_frame *f UNUSED, mapid_t mapid UNUSED)
 {
   /* The Relevant user code is as follows. */
   /* syscall1 (SYS_MUNMAP, mapid); */
@@ -452,7 +452,7 @@ sys_munmap (mapid_t mapid UNUSED)
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-sys_chdir (const char *dir UNUSED)
+sys_chdir (struct intr_frame *f UNUSED, const char *dir UNUSED)
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_CHDIR, dir); */
@@ -464,7 +464,7 @@ sys_chdir (const char *dir UNUSED)
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-sys_mkdir (const char *dir UNUSED)
+sys_mkdir (struct intr_frame *f UNUSED, const char *dir UNUSED)
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_MKDIR, dir); */
@@ -476,7 +476,7 @@ sys_mkdir (const char *dir UNUSED)
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-sys_readdir (int fd UNUSED, char name[READDIR_MAX_LEN + 1] UNUSED) 
+sys_readdir (struct intr_frame *f UNUSED, int fd UNUSED, char name[READDIR_MAX_LEN + 1] UNUSED) 
 {
   /* The Relevant user code is as follows. */
   /* return syscall2 (SYS_READDIR, fd, name); */
@@ -488,7 +488,7 @@ sys_readdir (int fd UNUSED, char name[READDIR_MAX_LEN + 1] UNUSED)
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-sys_isdir (int fd UNUSED) 
+sys_isdir (struct intr_frame *f UNUSED, int fd UNUSED) 
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_ISDIR, fd); */
@@ -500,7 +500,7 @@ sys_isdir (int fd UNUSED)
 
 /* LOGOS-ADDED FUNCTION */
 static int
-sys_inumber (int fd UNUSED) 
+sys_inumber (struct intr_frame *f UNUSED, int fd UNUSED) 
 {
   /* The Relevant user code is as follows. */
   /* return syscall1 (SYS_INUMBER, fd); */

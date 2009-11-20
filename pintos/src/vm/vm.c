@@ -293,7 +293,8 @@ vm_prepare_to_swap_out_common (struct vm_frame_table_entry *fte, bool* write_req
    Sometimes, some physical free memory pages for user can be available. 
    We allow this function called by only the process that is the owner of the page represented by pg_id. 
 */
-void *vm_request_user_page (const struct page_identifier* pg_id)
+void *
+vm_request_user_page (const struct page_identifier* pg_id)
 {
   void * kpage;
   struct vm_frame_table_entry *fte;
@@ -313,7 +314,7 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
   if (pg_id->upage == NULL)
     return NULL;
 
-  if (!process_is_valid_user_virtual_address(pg_id->upage, 1, false) || pg_ofs(pg_id->upage)!=0)
+  if (!process_is_valid_user_virtual_address_wo_stack_growth(pg_id->upage, 1, false) || pg_ofs(pg_id->upage)!=0)
     return NULL;
 
   /* Try to get a free page using the palloc_*_without_vm function. */
@@ -405,7 +406,8 @@ void *vm_request_user_page (const struct page_identifier* pg_id)
 /* LOGOS-ADDED FUNCTION
    Reaplace a existing user page and return it as a new user page when called by allocators with no more physical memory for user available. 
 */
-void *vm_request_new_user_page (void)
+void *
+vm_request_new_user_page (void)
 {
   void * kpage;
   struct vm_frame_table_entry *fte;
@@ -463,25 +465,21 @@ void *vm_request_new_user_page (void)
   return kpage;
 }
 
-/* LOGOS-ADDED FUNCTION
-   Try to make the stack grow to cover the page represented by pg_id. 
-*/
-bool vm_try_stack_growth (struct thread* t, void* fault_addr, void *esp)
+/* LOGOS-ADDED FUNCTION */
+bool
+vm_is_address_in_growable_stack_area (struct thread* t, const void* addr, void *esp)
 {
-  void *kpage, *upage;
+  void *upage;
   bool b;
 
-  /* We allow this function called by only the process that is the owner of the page represented by pg_id. */
-  ASSERT (t == thread_current ());
-
-  /* Check whether pg_id is correct or not. */
-  if (fault_addr == NULL)
+  /* Check whether addr is correct or not. */
+  if (addr == NULL)
     return false;
 
-  if (!is_user_vaddr (fault_addr))
+  if (!is_user_vaddr (addr))
     return false;
 
-  upage = pg_round_down (fault_addr);
+  upage = pg_round_down (addr);
 
   /* Check whether the address is mapped or not. */
   lock_acquire (&t->pagedir_lock);
@@ -493,13 +491,31 @@ bool vm_try_stack_growth (struct thread* t, void* fault_addr, void *esp)
 
   /* Check the stack limit and esp. */
   b = false;
-  if (t->stack_allocated_lower <= fault_addr && fault_addr < PHYS_BASE)
+  if (t->stack_allocated_lower <= addr && addr < PHYS_BASE)
     b = true;
 
-  if (esp <= fault_addr && t->stack_allocation_limit <= upage && fault_addr < PHYS_BASE)
+  if (esp <= addr && t->stack_allocation_limit <= upage && addr < PHYS_BASE)
 	b = true;
 
-  if (!b)
+  return b;
+}
+
+/* LOGOS-ADDED FUNCTION
+   Try to make the stack grow to cover the page containing fault_addr. 
+*/
+bool
+vm_try_stack_growth (struct thread* t, const void* fault_addr, void *esp)
+{
+  void *kpage, *upage;
+  bool b;
+
+  /* We allow this function called by only the process that is the owner of the page represented by pg_id. */
+  ASSERT (t == thread_current ());
+
+  upage = pg_round_down (fault_addr);
+
+  /* Check whether fault_addr is in the growable stack area. */
+  if (!vm_is_address_in_growable_stack_area (t, fault_addr, esp))
     return false;
 
   /* Allocate a page for the stack and return. */
