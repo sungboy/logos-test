@@ -26,7 +26,7 @@ void lru_test_start (void);
 void lru_test_middle (void);
 
 /* Offset within a page. */
-static inline unsigned pg_ofs (const void *va) {
+static inline unsigned pg_ofs (const volatile void *va) {
   return (uintptr_t) va & PGMASK;
 }
 
@@ -34,47 +34,54 @@ static inline unsigned pg_ofs (const void *va) {
 void
 test_main (void)
 {
-  int jump;
+  volatile int jump;
 
   volatile char stack_unused1[PGSIZE];
-  memset (stack_unused1, 0xff, 1);
+  *(stack_unused1) = 0xff;
 
   jump = pg_ofs (stack_unused1) - PGSIZE;
 
   volatile char stack_unused2[PGSIZE];
-  memset (stack_unused2 - jump, 0xff, 1);
+  *(stack_unused2 - jump) = 0xff;
+
   volatile char stack_unused3[PGSIZE];
   volatile char stack_unused4[PGSIZE];
+
+  if (stack_unused3 == stack_unused4)
+    jump = jump;
 
   lru_test_start ();
 
   volatile char stack_obj1[PGSIZE];
-  memset (stack_obj1 - jump, 1, 1);
+  *(stack_obj1 - jump) = 1;
 
   volatile char stack_obj2[PGSIZE];
-  memset (stack_obj2 - jump, 2, 1);
+  *(stack_obj2 - jump) = 2;
 
   volatile char stack_obj3[PGSIZE];
-  memset (stack_obj3 - jump, 3, 1);
+  *(stack_obj3 - jump) = 3;
   
   lru_test_middle ();
 
   volatile char stack_obj4[PGSIZE];
-  memset (stack_obj4 - jump, 4, 1);
+  *(stack_obj4 - jump) = 4;
 
   volatile char stack_obj5[PGSIZE];
-  memset (stack_obj5 - jump, 5, 1);
+  *(stack_obj5 - jump) = 5;
 
-  memset (stack_obj1 - jump, 1, 1);
-  memset (stack_obj2 - jump, 2, 1);
-  memset (stack_obj3 - jump, 3, 1);
-  memset (stack_obj4 - jump, 4, 1);
-  memset (stack_obj5 - jump, 5, 1);
+  *(stack_obj1 - jump) = 1;
+  *(stack_obj2 - jump) = 2;
+  *(stack_obj3 - jump) = 3;
+  *(stack_obj4 - jump) = 4;
+  *(stack_obj5 - jump) = 5;
+  *(stack_obj1 - jump) = 1;
+  *(stack_obj2 - jump) = 2;
+  *(stack_obj3 - jump) = 3;
 
-  msg ("[Object Table]\n");
-  msg ("obj1: %x", (int)stack_obj1 - jump);
-  msg ("obj2: %x", (int)stack_obj2 - jump);
-  msg ("obj3: %x", (int)stack_obj3 - jump);
-  msg ("obj4: %x", (int)stack_obj4 - jump);
-  msg ("obj5: %x", (int)stack_obj5 - jump);
+  msg ("[Object Table]");
+  msg ("obj1: %x", (int)(stack_obj1 - jump));
+  msg ("obj2: %x", (int)(stack_obj2 - jump));
+  msg ("obj3: %x", (int)(stack_obj3 - jump));
+  msg ("obj4: %x", (int)(stack_obj4 - jump));
+  msg ("obj5: %x", (int)(stack_obj5 - jump));
 }
