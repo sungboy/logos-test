@@ -219,8 +219,8 @@ pagedir_get_sup_page_table_entry (pagedir_t epd, const void *uaddr)
   if (pte != NULL)
   {
      ret = vm_get_sup_page_table_entry (&epd->spd, (void*)uaddr);
-	 ASSERT (ret != NULL);
-	 return ret;
+     if (ret)
+	   return ret;
   }
 
   return NULL;
@@ -456,10 +456,9 @@ pagedir_exist (pagedir_t epd, const void *uaddr)
 #ifdef VM
       spte = pagedir_get_sup_page_table_entry (epd, uaddr);
 
-      ASSERT (spte != NULL);
-
-      if (spte->storage_type != PAGE_STORAGE_NONE)
-	    return true;
+      if (spte)
+        if (spte->storage_type != PAGE_STORAGE_NONE)
+	      return true;
 #endif
     }
 

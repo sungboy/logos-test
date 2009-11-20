@@ -466,36 +466,37 @@ void *vm_request_new_user_page (void)
 /* LOGOS-ADDED FUNCTION
    Try to make the stack grow to cover the page represented by pg_id. 
 */
-bool vm_try_stack_growth (const struct page_identifier* pg_id, void *esp)
+bool vm_try_stack_growth (struct thread* t, void* fault_addr, void *esp)
 {
-  struct thread *t = thread_current ();
-  void *kpage;
+  void *kpage, *upage;
   bool b;
 
   /* We allow this function called by only the process that is the owner of the page represented by pg_id. */
-  ASSERT (thread_current () == pg_id->t);
+  ASSERT (t == thread_current ());
 
   /* Check whether pg_id is correct or not. */
-  if (pg_id->upage == NULL)
+  if (fault_addr == NULL)
     return false;
 
-  if (!process_is_valid_user_virtual_address(pg_id->upage, 1, false) || pg_ofs(pg_id->upage)!=0)
+  if (!is_user_vaddr (fault_addr))
     return false;
+
+  upage = pg_round_down (fault_addr);
 
   /* Check whether the address is mapped or not. */
-  lock_acquire (&pg_id->t->pagedir_lock);
-  b = pagedir_exist (pg_id->t->pagedir, pg_id->upage);
-  lock_release (&pg_id->t->pagedir_lock);
+  lock_acquire (&t->pagedir_lock);
+  b = pagedir_exist (t->pagedir, upage);
+  lock_release (&t->pagedir_lock);
 
   if (b)
     return false;
 
   /* Check the stack limit and esp. */
   b = false;
-  if (t->stack_allocated_lower <= pg_id->upage && pg_id->upage < PHYS_BASE)
+  if (t->stack_allocated_lower <= fault_addr && fault_addr < PHYS_BASE)
     b = true;
 
-  if (esp <= pg_id->upage && t->stack_allocation_limit <= pg_id->upage && pg_id->upage < PHYS_BASE)
+  if (esp <= fault_addr && t->stack_allocation_limit <= upage && fault_addr < PHYS_BASE)
 	b = true;
 
   if (!b)
@@ -506,11 +507,17 @@ bool vm_try_stack_growth (const struct page_identifier* pg_id, void *esp)
   if (kpage == NULL)
     return false;
 
-  b = install_page (pg_id->upage, kpage, true);
+  b = install_page (upage, kpage, true);
   if (!b)
-    palloc_free_page (kpage);
+    {
+      palloc_free_page (kpage);
+	  return false;
+    }
 
-  return b;
+  if (t->stack_allocated_lower > upage)
+    t->stack_allocated_lower = upage;
+
+  return true;
 }
 
 /* LOGOS-ADDED FUNCTION
