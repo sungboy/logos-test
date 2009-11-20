@@ -30,6 +30,8 @@ struct lock vm_frame_table_lock;         /* LOGOS-ADDED VARIABLE. Lock for the f
 struct list vm_frame_table;              /* LOGOS-ADDED VARIABLE. Before using this variable, acquire vm_frame_table_lock first. */
 struct vm_frame_table_entry *clock_hand; /* LOGOS-ADDED VARIABLE. The clock hand for the clock algorithm. */
 
+static bool vm_verbose;
+
 /* LOGOS-ADDED FUNCTION
    Initialize virtual memory. */
 void
@@ -39,6 +41,8 @@ vm_init (void)
   list_init (&vm_frame_table);
 
   clock_hand = NULL;
+
+  vm_verbose = false;
 }
 
 /* LOGOS-ADDED FUNCTION
@@ -130,7 +134,7 @@ vm_set_all_thread_pages_nonpageable_internal (struct thread* t, bool frame_table
       struct vm_frame_table_entry *fte = list_entry (e, struct vm_frame_table_entry, elem);
       next = list_next (e);
 
-	  if(fte->pg_id.t == t)
+	  if(fte->pg_id.t == t || t == NULL)
         {
 		  vm_remove_fte_from_frame_table_internal (fte);
 
@@ -603,6 +607,10 @@ vm_replacement_policy (const struct page_identifier *pg_id)
   /* Set clock hand next to it and return it. */
   ret = clock_hand;
   vm_move_clock_hand_to_next ();
+
+  /* Print Debug Info. */
+  if (vm_verbose)
+	  printf ("Clock Algorithm : The page %x of thread %x is being replaced. \n", ret->pg_id.upage, ret->pg_id.t);
   
   return ret;
 }
@@ -611,12 +619,16 @@ vm_replacement_policy (const struct page_identifier *pg_id)
 void
 vm_lru_test_start (void)
 {
-  printf ("lru_test_start.\n");
+  vm_set_all_thread_pages_nonpageable_internal (NULL, true);
+  printf ("All the pages in memory is now nonpagable. \n");
 }
 
 /* LOGOS-ADDED FUNCTION */
 void
 vm_lru_test_middle (void)
 {
-  printf ("lru_test_middle.\n");
+  vm_verbose = true;
+  palloc_deny_user_allocation (true);
+  printf ("No more physical memory allocation is not allowed. \n");
+  printf ("Verbose message printing started. \n");
 }
