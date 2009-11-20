@@ -196,7 +196,7 @@ palloc_get_page_without_vm (enum palloc_flags flags)
 }
 
 /* LOGOS-ADDED FUNCTION */
-void *
+void
 palloc_deny_user_allocation (bool deny)
 {
   lock_acquire (&user_pool.lock);
