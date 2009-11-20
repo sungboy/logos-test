@@ -138,6 +138,10 @@ vm_set_all_thread_pages_nonpageable_internal (struct thread* t, bool frame_table
         {
 		  vm_remove_fte_from_frame_table_internal (fte);
 
+		  /* Print Debug Info. */
+          /*if (vm_verbose)
+	        printf ("Setting the page %x of thread %x nonpagable. \n", fte->pg_id.upage, fte->pg_id.t);*/
+
 	      free (fte);
         }
     }
@@ -619,7 +623,9 @@ vm_replacement_policy (const struct page_identifier *pg_id)
 void
 vm_lru_test_start (void)
 {
+  vm_verbose = true;
   vm_set_all_thread_pages_nonpageable_internal (NULL, true);
+  vm_verbose = false;
   printf ("All the pages in memory is now nonpagable. \n");
 }
 
