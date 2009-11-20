@@ -26,6 +26,8 @@
 
 static thread_func execute_thread NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool process_is_valid_user_virtual_address_for_string_read_internal (const void *ustr, void *esp, bool check_func (const void *, size_t, bool, void*));
+static bool process_is_valid_user_virtual_address_wo_stack_growth_internal (const void *uvaddr, size_t size, bool writable, void *esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -689,13 +691,61 @@ install_page (void *upage, void *kpage, bool writable)
 /* LOGOS-ADDED FUNCTION
    Check whether the address, uvaddr is a valid user virtual address. */
 bool
-process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool writable)
+process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool writable, void *esp)
+{
+  bool b;
+  b = process_is_valid_user_virtual_address_wo_stack_growth (uvaddr, size, writable);
+
+  if(b)
+    return true;
+
+#ifdef VM
+  b = vm_is_address_in_growable_stack_area (thread_current (), uvaddr, esp);
+
+  if(b)
+    return true;
+#endif
+
+  return false;
+}
+
+/* LOGOS-ADDED FUNCTION */
+static bool
+process_is_valid_user_virtual_address_for_string_read_internal (const void *ustr, void *esp, bool (*check_func) (const void *, size_t, bool, void*))
+{
+  const char *p = (const char*)ustr;
+  while (1)
+  {
+    if (!check_func (p, 1, false, esp))
+      return false;
+
+    if(*p == '\0')
+      break;
+
+    p++;
+  }
+  return true;
+}
+
+/* LOGOS-ADDED FUNCTION
+   Check whether the address, uvaddr is a vaild user virtual address of a string. */
+bool
+process_is_valid_user_virtual_address_for_string_read (const void *ustr, void *esp)
+{
+  return process_is_valid_user_virtual_address_for_string_read_internal (ustr, esp, process_is_valid_user_virtual_address);
+}
+
+/* LOGOS-ADDED FUNCTION */
+static bool
+process_is_valid_user_virtual_address_wo_stack_growth_internal (const void *uvaddr, size_t size, bool writable, void *esp)
 {
   void *upage, *upagec;
   uintptr_t pg_count;
   struct thread *t;
   uintptr_t ui;
   pagedir_t pd;
+
+  ASSERT (esp == NULL);
 
   if (!is_user_vaddr (uvaddr))
     return false;
@@ -740,22 +790,20 @@ process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool wri
   return true;
 }
 
-/* LOGOS-ADDED FUNCTION */
+/* LOGOS-ADDED FUNCTION
+   Check whether the address, uvaddr is a valid user virtual address even without using the stack growth. */
 bool
-process_is_valid_user_virtual_address_for_string_read (const void *ustr)
+process_is_valid_user_virtual_address_wo_stack_growth (const void *uvaddr, size_t size, bool writable)
 {
-  const char *p = (const char*)ustr;
-  while (1)
-  {
-    if (!process_is_valid_user_virtual_address (p, 1, false))
-      return false;
+  return process_is_valid_user_virtual_address_wo_stack_growth_internal (uvaddr, size, writable, NULL);
+}
 
-    if(*p == '\0')
-      break;
-
-    p++;
-  }
-  return true;
+/* LOGOS-ADDED FUNCTION
+   Check whether the address, uvaddr is a vaild user virtual address of a string even without using the stack growth. */
+bool
+process_is_valid_user_virtual_address_for_string_read_wo_stack_growth (const void *ustr)
+{
+  return process_is_valid_user_virtual_address_for_string_read_internal (ustr, NULL, process_is_valid_user_virtual_address_wo_stack_growth_internal);
 }
 
 /* LOGOS-ADDED FUNCTION

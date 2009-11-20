@@ -16,8 +16,10 @@ int process_wait (tid_t);
 void process_exit (int status);
 void process_activate (void);
 
-bool process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool writable);
-bool process_is_valid_user_virtual_address_for_string_read (const void *ustr);
+bool process_is_valid_user_virtual_address (const void *uvaddr, size_t size, bool writable, void *esp);
+bool process_is_valid_user_virtual_address_for_string_read (const void *ustr, void *esp);
+bool process_is_valid_user_virtual_address_wo_stack_growth (const void *uvaddr, size_t size, bool writable);
+bool process_is_valid_user_virtual_address_for_string_read_wo_stack_growth (const void *ustr);
 
 bool process_init_file_table(struct thread* t);
 void process_destroy_file_table(struct thread* t);
