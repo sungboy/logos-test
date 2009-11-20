@@ -23,6 +23,9 @@ static void vm_set_all_thread_pages_nonpageable_internal (struct thread* t, bool
 static void vm_remove_fte_from_frame_table_internal (struct vm_frame_table_entry *fte);
 static struct vm_frame_table_entry *vm_replacement_policy (const struct page_identifier *pg_id);
 
+void vm_lru_test_start (void);
+void vm_lru_test_middle (void);
+
 struct lock vm_frame_table_lock;         /* LOGOS-ADDED VARIABLE. Lock for the frame table. */
 struct list vm_frame_table;              /* LOGOS-ADDED VARIABLE. Before using this variable, acquire vm_frame_table_lock first. */
 struct vm_frame_table_entry *clock_hand; /* LOGOS-ADDED VARIABLE. The clock hand for the clock algorithm. */
@@ -465,12 +468,15 @@ vm_request_new_user_page (void)
   return kpage;
 }
 
+#define STACK_GROWTH_ALLOWED_PAGE_COUNT 1
+
 /* LOGOS-ADDED FUNCTION */
 bool
 vm_is_address_in_growable_stack_area (struct thread* t, const void* addr, void *esp)
 {
   void *upage;
   bool b;
+  int64_t temp64;
 
   /* Check whether addr is correct or not. */
   if (addr == NULL)
@@ -491,11 +497,24 @@ vm_is_address_in_growable_stack_area (struct thread* t, const void* addr, void *
 
   /* Check the stack limit and esp. */
   b = false;
-  if (t->stack_allocated_lower <= addr && addr < PHYS_BASE)
-    b = true;
+  if (t->stack_allocation_limit <= upage && addr < PHYS_BASE)
+  {
+    if (t->stack_allocated_lower <= addr)
+      b = true;
 
-  if (esp <= addr && t->stack_allocation_limit <= upage && addr < PHYS_BASE)
-	b = true;
+    if (esp <= addr)
+      b = true;
+
+    if (pg_round_down(esp) <= addr + (STACK_GROWTH_ALLOWED_PAGE_COUNT * PGSIZE))
+	  b = true;
+  }
+
+  /* Update t->stack_allocated_lower. */
+  temp64 = ((int64_t)pg_round_down(esp)) - (STACK_GROWTH_ALLOWED_PAGE_COUNT * PGSIZE);
+  if (temp64 < ((int64_t)t->stack_allocation_limit))
+    temp64 = (int64_t)t->stack_allocation_limit;
+  if (temp64 < ((int64_t)t->stack_allocated_lower))
+    t->stack_allocated_lower = (void*)temp64;
 
   return b;
 }
@@ -542,18 +561,6 @@ vm_try_stack_growth (struct thread* t, const void* fault_addr, void *esp)
 static struct vm_frame_table_entry *
 vm_replacement_policy (const struct page_identifier *pg_id)
 {
-  /* From Dongmin To Team Member : My part has not completed yet, but I think it is possible to implement this function using the data structures I made. 
-     The paramter pg_id is the page identifier that represent the page we want to load. pg_id.t is NULL if the page is a new page. 
-     Use vm_frame_table for the page frame table. 
-	 It is a list of struct vm_frame_table_entry. Each struct vm_frame_table_entry represents a page in memory. 
-	 Use pg_id in struct vm_frame_table_entry, (struct vm_frame_table_entry).pg_id.t->pagedir and pagedir_* functions for the accessed bit and the dirty(modified) bit. 
-     I think you don't have to consider the mutual exclusion and locking much when you implement this function because I will ensure that this function is called by only one thread at a time. 
-	 ( There may be some exceptions such as t->pagedir_lock, but if you want me to add it, i'll do that. Just consider the mutual exclusion and locking related to your own data structure 
-	   although I think the additional mutual exclusion and locking is not necessary. )
-     I think you have to add some external variables such as a clock hand.
-     Implement the clock algorithm and return the pointer of struct vm_frame_table_entry representing the page you want to replace. 
-     */
-
   struct vm_frame_table_entry *ret;
   struct lock *cur_lock;
 
@@ -598,4 +605,18 @@ vm_replacement_policy (const struct page_identifier *pg_id)
   vm_move_clock_hand_to_next ();
   
   return ret;
+}
+
+/* LOGOS-ADDED FUNCTION */
+void
+vm_lru_test_start (void)
+{
+  printf ("lru_test_start.\n");
+}
+
+/* LOGOS-ADDED FUNCTION */
+void
+vm_lru_test_middle (void)
+{
+  printf ("lru_test_middle.\n");
 }
