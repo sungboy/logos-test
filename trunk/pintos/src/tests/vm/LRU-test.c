@@ -52,31 +52,32 @@ test_main (void)
 
   lru_test_start ();
 
-  volatile char stack_obj1[PGSIZE];
-  *(stack_obj1 - jump) = 1;
-
   volatile char stack_obj2[PGSIZE];
   *(stack_obj2 - jump) = 2;
 
   volatile char stack_obj3[PGSIZE];
   *(stack_obj3 - jump) = 3;
-  
-  lru_test_middle ();
 
-  volatile char stack_obj4[PGSIZE];
-  *(stack_obj4 - jump) = 4;
+  *(stack_obj2 - jump) = 2;
+
+  volatile char stack_obj1[PGSIZE];
+  *(stack_obj1 - jump) = 1;
+
+  lru_test_middle ();
 
   volatile char stack_obj5[PGSIZE];
   *(stack_obj5 - jump) = 5;
 
-  *(stack_obj1 - jump) = 1;
   *(stack_obj2 - jump) = 2;
-  *(stack_obj3 - jump) = 3;
+
+  volatile char stack_obj4[PGSIZE];
   *(stack_obj4 - jump) = 4;
+
   *(stack_obj5 - jump) = 5;
-  *(stack_obj1 - jump) = 1;
-  *(stack_obj2 - jump) = 2;
   *(stack_obj3 - jump) = 3;
+  *(stack_obj2 - jump) = 2;
+  *(stack_obj5 - jump) = 5;
+  *(stack_obj2 - jump) = 2;
 
   msg ("[Object Table]");
   msg ("obj1: %x", (int)(stack_obj1 - jump));
