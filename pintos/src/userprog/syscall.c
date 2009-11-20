@@ -32,6 +32,7 @@ static bool sys_readdir (struct intr_frame *f, int fd, char name[READDIR_MAX_LEN
 static bool sys_isdir (struct intr_frame *f, int fd);
 static int sys_inumber (struct intr_frame *f, int fd);
 static void sys_lru_test_start (struct intr_frame *f);
+static void sys_lru_test_middle (struct intr_frame *f);
 
 void
 syscall_init (void) 
@@ -76,6 +77,7 @@ syscall_handler (struct intr_frame *f)
 
     /* For test. */
     0, /* SYS_LRU_TEST_START */
+    0, /* SYS_LRU_TEST_MIDDLE */
 
 	/* Add new system call here */
 
@@ -114,6 +116,7 @@ syscall_handler (struct intr_frame *f)
 
     /* For test. */
     sys_lru_test_start, /* SYS_LRU_TEST_START */
+	sys_lru_test_middle, /* SYS_LRU_TEST_MIDDLE */
 
 	/* Add new system call here */
 
@@ -152,6 +155,7 @@ syscall_handler (struct intr_frame *f)
 
     /* For test. */
     false, /* SYS_LRU_TEST_START */
+	false, /* SYS_LRU_TEST_MIDDLE */
 
 	/* Add new system call here */
 
@@ -520,12 +524,27 @@ sys_inumber (struct intr_frame *f UNUSED, int fd UNUSED)
   return -1;
 }
 
-static void sys_lru_test_start (struct intr_frame *f)
+#ifdef VM
+void vm_lru_test_start (void);
+void vm_lru_test_middle (void);
+#endif
+
+/* LOGOS-ADDED FUNCTION */
+static void sys_lru_test_start (struct intr_frame *f UNUSED)
 {
 #ifdef VM
-  printf ("lru_test_start started.\n");
+  vm_lru_test_start ();
 #else
   ASSERT (0);
-  return;
+#endif
+}
+
+/* LOGOS-ADDED FUNCTION */
+static void sys_lru_test_middle (struct intr_frame *f UNUSED)
+{
+#ifdef VM
+  vm_lru_test_middle ();
+#else
+  ASSERT (0);
 #endif
 }

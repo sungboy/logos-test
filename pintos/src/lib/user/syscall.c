@@ -62,12 +62,7 @@
         })
 
 void lru_test_start (void);
-
-void
-lru_test_start (void)
-{
-  syscall0 (SYS_LRU_TEST_START);
-}
+void lru_test_middle (void);
 
 void
 halt (void) 
@@ -189,4 +184,15 @@ int
 inumber (int fd) 
 {
   return syscall1 (SYS_INUMBER, fd);
+}
+
+void
+lru_test_start (void)
+{
+  syscall0 (SYS_LRU_TEST_START);
+}
+
+void lru_test_middle (void)
+{
+  syscall0 (SYS_LRU_TEST_MIDDLE);
 }

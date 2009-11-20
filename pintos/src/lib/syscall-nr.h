@@ -32,6 +32,7 @@ enum
 
 	/* For test. */
 	SYS_LRU_TEST_START,         /* LOGOS-ADDED. Start the LRU test. */
+	SYS_LRU_TEST_MIDDLE,        /* LOGOS-ADDED. Indicate the middle of the LRU test. */
 
 	/* Add new system call here */
 
