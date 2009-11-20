@@ -39,7 +39,7 @@ test_main (void)
   volatile char stack_unused1[PGSIZE];
   *(stack_unused1) = 0xff;
 
-  jump = pg_ofs (stack_unused1) - PGSIZE;
+  jump = (pg_ofs (stack_unused1) - PGSIZE) % PGSIZE;
 
   volatile char stack_unused2[PGSIZE];
   *(stack_unused2 - jump) = 0xff;
