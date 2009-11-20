@@ -5,6 +5,9 @@
 #include "tests/lib.h"
 #include "tests/main.h"
 
+/* A system call for this test. */
+void lru_test_start (void);
+
 void
 test_main (void)
 {
@@ -22,7 +25,7 @@ test_main (void)
   memset (stack_obj1, 0, 1);
   msg ("obj1: %x", (int)stack_obj1);
 
-  // foo();
+  lru_test_start ();
 
   char stack_obj5[4096];
   memset (stack_obj5, 0, 1);

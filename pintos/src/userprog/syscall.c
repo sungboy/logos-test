@@ -31,6 +31,7 @@ static bool sys_mkdir (struct intr_frame *f, const char *dir);
 static bool sys_readdir (struct intr_frame *f, int fd, char name[READDIR_MAX_LEN + 1]);
 static bool sys_isdir (struct intr_frame *f, int fd);
 static int sys_inumber (struct intr_frame *f, int fd);
+static void sys_lru_test_start (struct intr_frame *f);
 
 void
 syscall_init (void) 
@@ -73,6 +74,9 @@ syscall_handler (struct intr_frame *f)
     1, /* SYS_ISDIR */
     1, /* SYS_INUMBER */
 
+    /* For test. */
+    0, /* SYS_LRU_TEST_START */
+
 	/* Add new system call here */
 
 	/* The number of system calls */
@@ -108,6 +112,9 @@ syscall_handler (struct intr_frame *f)
     sys_isdir, /* SYS_ISDIR */
     sys_inumber, /* SYS_INUMBER */
 
+    /* For test. */
+    sys_lru_test_start, /* SYS_LRU_TEST_START */
+
 	/* Add new system call here */
 
 	/* The number of system calls */
@@ -142,6 +149,9 @@ syscall_handler (struct intr_frame *f)
     true, /* SYS_READDIR */
     true, /* SYS_ISDIR */
     true, /* SYS_INUMBER */
+
+    /* For test. */
+    false, /* SYS_LRU_TEST_START */
 
 	/* Add new system call here */
 
@@ -508,4 +518,14 @@ sys_inumber (struct intr_frame *f UNUSED, int fd UNUSED)
   /* TODO : Implement Here. */
   printf("sys_inumber : not implemented yet. \n");
   return -1;
+}
+
+static void sys_lru_test_start (struct intr_frame *f)
+{
+#ifdef VM
+  printf ("lru_test_start started.\n");
+#else
+  ASSERT (0);
+  return;
+#endif
 }
