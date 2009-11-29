@@ -111,7 +111,7 @@ vm_remove_fte_from_frame_table_internal (struct vm_frame_table_entry *fte)
 }
 
 /* LOGOS-ADDED FUNCTION
-   Set a user virtual page pagable. */
+   Set a user virtual page pageable. */
 bool
 vm_set_page_pageable (struct thread* t, void *upage)
 {
@@ -140,7 +140,7 @@ vm_set_all_thread_pages_nonpageable_internal (struct thread* t, bool frame_table
 
 		  /* Print Debug Info. */
           /*if (vm_verbose)
-	        printf ("Setting the page %x of thread %x nonpagable. \n", fte->pg_id.upage, fte->pg_id.t);*/
+	        printf ("Setting the page %x of thread %x nonpageable. \n", fte->pg_id.upage, fte->pg_id.t);*/
 
 	      free (fte);
         }
@@ -626,7 +626,7 @@ vm_lru_test_start (void)
   vm_verbose = true;
   vm_set_all_thread_pages_nonpageable_internal (NULL, true);
   vm_verbose = false;
-  printf ("All the pages in memory is now nonpagable. \n");
+  printf ("All the pages in memory is now nonpageable. \n");
 }
 
 /* LOGOS-ADDED FUNCTION */
