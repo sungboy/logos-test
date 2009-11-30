@@ -5,46 +5,67 @@
 #include "devices/timer.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
 
 #ifdef BUFFCACHE
 
 /* LOGOS-ADDED TYPE */
 struct buffcache_entry_status
   {
-    struct lock status_lock;              /* Lock for this struct. */
-    int64_t access_time;                  /* Access time expressed by timer ticks. Before using this variable, acquire status_lock first. */
-	int64_t access_seq;                   /* The sequence of access among entries with the same access time. Before using this variable, acquire status_lock first. */
-	int64_t dirty_write_time;             /* Dirty write time expressed by timer ticks. Before using this variable, acquire status_lock first. */
-    bool dirty;                           /* Dirty bit. Before using this variable, acquire status_lock first. */
+    struct lock status_lock;                      /* Lock for this struct. */
+    int64_t access_time;                          /* Access time expressed by timer ticks. Before using this variable, acquire status_lock first. */
+    int64_t access_seq;                           /* The sequence of access among entries with the same access time. Before using this variable, acquire status_lock first. */
+    int64_t dirty_write_time;                     /* Dirty write time expressed by timer ticks. Before using this variable, acquire status_lock first. */
+    bool dirty;                                   /* Dirty bit. Before using this variable, acquire status_lock first. */
   };
 
 /* LOGOS-ADDED TYPE */
 struct buffcache_entry
   {
-    struct hash_elem elem;                 /* Hash table element. */
-    struct disk *d;                        /* Disk. A portion of the key. Cannot be changed. */
-    disk_sector_t sec_no;                  /* Data sector. A portion of the key. Cannot be changed. */
-    struct buffcache_entry_status status;  /* Status. */
-    struct lock io_lock;                   /* Lock for I/Os. */
-    void* buffer;                          /* Data. Before using this variable, acquire io_lock first. */
+    struct hash_elem elem;                        /* Hash table element. */
+    struct disk *d;                               /* Disk. A portion of the key. Cannot be changed. */
+    disk_sector_t sec_no;                         /* Data sector. A portion of the key. Cannot be changed. */
+    struct buffcache_entry_status status;         /* Status. */
+    struct lock io_lock;                          /* Lock for I/Os. */
+    void* buffer;                                 /* Data. Before using this variable, acquire io_lock first. */
   };
 
-/* LOGOS-ADDED VALUE */
-#define BUFFCACHE_LIMIT 64                 /* The limit of entry count. Must be 2^k. */
+/* LOGOS-ADDED TYPE */
+struct bcra_work
+  {
+    struct list_elem elem;                        /* Linked list element. */
+    struct disk *d;                               /* Disk. */
+    disk_sector_t sec_no;                         /* Data sector. */
+  };
+
+/* LOGOS-ADDED VALUE START */
+#define BUFFCACHE_LIMIT 64                        /* The limit of entry count. Must be 2^k. */
+
+#define BCRA_WORKER_PRIORITY (PRI_DEFAULT - 2)    /* The thread priority of the read-ahead worker. */
+
+#define BCPWB_WORKER_PRIORITY (PRI_DEFAULT - 4)   /* The thread priority of the periodic write-behind worker. */
+#define BCPWB_SLEEP_TICKS (10 * TIMER_FREQ)       /* The sleep duration of the periodic write-behind worker in timer ticks. */
+/* LOGOS-ADDED VALUE END */
 
 /* LOGOS-ADDED VARIABLE BEGIN */
-static struct hash buffcache;              /* Buffer Cache. Before using this variable, acquire buffcache_global_lock first. */
+static struct hash buffcache;                     /* Buffer Cache. Before using this variable, acquire buffcache_global_lock first. */
 
-struct lock buffcache_global_lock;         /* Lock for buffer cache data structures. */
-struct lock buffcache_new_entry_lock;      /* Lock used when new buffer cache entry is being created. */
-struct lock buffcache_new_access_seq_lock; /* Lock for a new access sequence number. */
+static struct lock buffcache_global_lock;         /* Lock for buffer cache data structures. */
+static struct lock buffcache_new_entry_lock;      /* Lock used when new buffer cache entry is being created. */
+static struct lock buffcache_new_access_seq_lock; /* Lock for a new access sequence number. */
 
-int64_t last_access_time;                  /* The last access time expressed by timer ticks. Before using this variable, acquire buffcache_global_lock first. */
-int64_t last_access_seq;                   /* The last sequencial number of access among entries with the same access time. Before using this variable, acquire buffcache_global_lock first. */
+static int64_t last_access_time;                  /* The last access time expressed by timer ticks. Before using this variable, acquire buffcache_new_access_seq_lock first. */
+static int64_t last_access_seq;                   /* The last sequencial number of access among entries with the same access time. Before using this variable, acquire buffcache_new_access_seq_lock first. */
 
-bool buffcache_deny;                       /* Buffer cache operation deny. Before using this variable, acquire buffcache_global_lock first. */
+static bool buffcache_deny;                       /* Buffer cache operation deny. Before using this variable, acquire buffcache_global_lock first. */
+
+static struct list bcra_work_list;                /* Linked list for read-ahead works to be processed. Before using this variable, acquire bcra_work_lock first. */
+static struct lock bcra_work_lock;                /* Lock for data structures related to read-ahead works. */
+static struct semaphore bcra_worker_sem;          /* Counting semaphore to indicate that there are more read-ahead works to be processed. */
 /* LOGOS-ADDED VARIABLE END */
 
+static void buffcache_read_ahead_worker (void *aux);
+static void buffcache_periodic_write_behind_worker (void *aux);
 static void buffcache_set_access_stat (struct buffcache_entry_status *status);
 static unsigned hash_hash_buffcache_entry (const struct hash_elem *element, void *aux);
 static bool hash_less_buffcache_entry (const struct hash_elem *a, const struct hash_elem *b, void *aux);
@@ -53,6 +74,7 @@ static struct buffcache_entry *buffcache_get_entry (struct disk *d, disk_sector_
 static void buffcache_remove_entry (struct buffcache_entry *bce);
 static struct buffcache_entry *buffcache_get_new_entry_internal (struct disk *d, disk_sector_t sec_no, bool with_buffer);
 static struct buffcache_entry *buffcache_get_new_entry (struct disk *d, disk_sector_t sec_no);
+static bool buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, bool fetch_next, disk_sector_t sec_no_next);
 
 /* LOGOS-ADDED FUNCTION */
 void
@@ -71,6 +93,46 @@ buffcache_init (void)
   last_access_seq = -1;
 
   buffcache_deny = false;
+
+  list_init (&bcra_work_list);
+  lock_init (&bcra_work_lock);
+  sema_init (&bcra_worker_sem, 0);
+
+  thread_create ("bcra_worker", BCRA_WORKER_PRIORITY, buffcache_read_ahead_worker, NULL);
+  thread_create ("bcpwb_worker", BCPWB_WORKER_PRIORITY, buffcache_periodic_write_behind_worker, NULL);
+}
+
+/* LOGOS-ADDED FUNCTION */
+static void
+buffcache_read_ahead_worker (void *aux UNUSED)
+{
+  struct bcra_work *bcraw;
+
+  while (1)
+    {
+      sema_down (&bcra_worker_sem);
+
+	  /* Now, There are at least one read-ahead work to be processed. */
+	  lock_acquire (&bcra_work_lock);
+      bcraw = list_entry(list_pop_front (&bcra_work_list), struct bcra_work, elem);
+      lock_release (&bcra_work_lock);
+
+	  buffcache_read_internal (bcraw->d, bcraw->sec_no, NULL, false, 0);
+
+      free (bcraw);
+    }
+}
+
+/* LOGOS-ADDED FUNCTION */
+static void
+buffcache_periodic_write_behind_worker (void *aux UNUSED)
+{
+  while (1)
+    {
+      timer_sleep (BCPWB_SLEEP_TICKS);
+
+      buffcache_write_all_dirty_blocks (false);
+    }
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -199,8 +261,35 @@ buffcache_get_new_entry_internal (struct disk *d, disk_sector_t sec_no, bool wit
 static struct buffcache_entry *
 buffcache_replacement_policy (struct disk *d UNUSED, disk_sector_t sec_no UNUSED)
 {
-  /* TODO : Implement here correctly. */
-  return NULL;
+  int64_t lr_access_time;
+  int64_t lr_access_seq;
+  struct hash_iterator iter;
+  struct buffcache_entry *bce, *lre;
+
+  ASSERT (!buffcache_deny);
+
+  lr_access_time = timer_ticks () + 1;
+  lr_access_seq = 0;
+  lre = NULL;
+
+  hash_first (&iter, &buffcache);
+  while (hash_next (&iter))
+    {
+      bce = hash_entry (hash_cur (&iter), struct buffcache_entry, elem);
+
+      lock_acquire (&bce->status.status_lock);
+      if (bce->status.access_time < lr_access_time || (bce->status.access_time == lr_access_time && bce->status.access_seq < lr_access_seq))
+        {
+          lr_access_time = bce->status.access_time;
+          lr_access_seq = bce->status.access_seq;
+          lre = bce;
+        }
+      lock_release (&bce->status.status_lock);
+    }
+
+  ASSERT (lre != NULL);
+ 
+  return lre;
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -246,7 +335,7 @@ buffcache_get_new_entry (struct disk *d, disk_sector_t sec_no)
           if (while_count != WHILE_LIMIT)
             lock_release (&buffcache_global_lock);
 
-          /*To Disk. */
+          /* To Disk. */
           if (being_replaced->status.dirty)
             disk_write (being_replaced->d, being_replaced->sec_no, being_replaced->buffer);
 
@@ -281,8 +370,8 @@ buffcache_get_new_entry (struct disk *d, disk_sector_t sec_no)
 }
 
 /* LOGOS-ADDED FUNCTION */
-bool
-buffcache_read (struct disk *d, disk_sector_t sec_no, void *buffer)
+static bool
+buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, bool fetch_next, disk_sector_t sec_no_next)
 {
   struct buffcache_entry *bce;
   bool is_new_bce;
@@ -314,7 +403,8 @@ buffcache_read (struct disk *d, disk_sector_t sec_no, void *buffer)
   if (is_new_bce)
     disk_read (d, sec_no, bce->buffer);
 
-  memcpy (buffer, bce->buffer, DISK_SECTOR_SIZE);
+  if (buffer != NULL)
+    memcpy (buffer, bce->buffer, DISK_SECTOR_SIZE);
 
   lock_acquire (&bce->status.status_lock);
   buffcache_set_access_stat (&bce->status);
@@ -322,7 +412,36 @@ buffcache_read (struct disk *d, disk_sector_t sec_no, void *buffer)
 
   lock_release (&bce->io_lock);
 
+  /* Read-ahead. */
+  if (fetch_next)
+    {
+      struct bcra_work *bcraw;
+
+	  bcraw = (struct bcra_work *)malloc (sizeof (struct bcra_work));
+	  /* Read-ahead failed. Success anyway. */
+	  if (bcraw == NULL)
+        return true;
+
+	  bcraw->d = d;
+      bcraw->sec_no = sec_no_next;
+
+      lock_acquire (&bcra_work_lock);
+      list_push_back (&bcra_work_list, &bcraw->elem);
+      lock_release (&bcra_work_lock);
+
+      sema_up (&bcra_worker_sem);
+    }
+
   return true;
+}
+
+/* LOGOS-ADDED FUNCTION */
+bool
+buffcache_read (struct disk *d, disk_sector_t sec_no, void *buffer, bool fetch_next, disk_sector_t sec_no_next)
+{
+  ASSERT (buffer != NULL);
+
+  return buffcache_read_internal (d, sec_no, buffer, fetch_next, sec_no_next);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -346,6 +465,7 @@ buffcache_write (struct disk *d, disk_sector_t sec_no, const void *buffer)
   lock_acquire (&bce->io_lock);
 
   lock_acquire (&bce->status.status_lock);
+  bce->status.dirty_write_time = timer_ticks ();
   buffcache_set_access_stat (&bce->status);
   bce->status.dirty = true;
   lock_release (&bce->status.status_lock);
@@ -355,6 +475,7 @@ buffcache_write (struct disk *d, disk_sector_t sec_no, const void *buffer)
   memcpy (bce->buffer, buffer, DISK_SECTOR_SIZE);
 
   lock_acquire (&bce->status.status_lock);
+  bce->status.dirty_write_time = timer_ticks ();
   buffcache_set_access_stat (&bce->status);
   ASSERT (bce->status.dirty);
   lock_release (&bce->status.status_lock);
@@ -368,7 +489,65 @@ buffcache_write (struct disk *d, disk_sector_t sec_no, const void *buffer)
 void
 buffcache_write_all_dirty_blocks (bool for_power_off)
 {
-  /* ... */
+  int64_t now;
+  bool stop=false;
+  struct hash_iterator iter;
+  struct buffcache_entry *bce;
+
+  lock_acquire (&buffcache_global_lock);
+
+  if (buffcache_deny)
+    {
+      lock_release (&buffcache_global_lock);
+	  return;
+    }
+
+  buffcache_deny = for_power_off;
+
+  now = timer_ticks ();
+
+  while (!stop)
+    {
+      stop = true;
+
+      bce = NULL;
+      hash_first (&iter, &buffcache);
+      while (hash_next (&iter))
+        {
+          bce = hash_entry (hash_cur (&iter), struct buffcache_entry, elem);
+
+          lock_acquire (&bce->status.status_lock);
+          if (bce->status.dirty && bce->status.dirty_write_time < now)
+            {
+              lock_release (&bce->status.status_lock);
+              stop=false;
+              break;
+            }
+		  lock_release (&bce->status.status_lock);
+
+		  bce = NULL;
+        }
+
+      if (bce == NULL)
+        break;
+
+      lock_acquire (&bce->io_lock);
+      lock_acquire (&bce->status.status_lock);
+
+      lock_release (&buffcache_global_lock);
+
+      if (bce->status.dirty)
+        disk_write (bce->d, bce->sec_no, bce->buffer);
+
+      bce->status.dirty = false;
+
+      lock_release (&bce->status.status_lock);
+      lock_release (&bce->io_lock);
+
+	  lock_acquire (&buffcache_global_lock);
+    }
+
+  lock_release (&buffcache_global_lock);
 }
 
 #endif //BUFFCACHE
