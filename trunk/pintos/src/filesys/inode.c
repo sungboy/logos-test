@@ -11,12 +11,22 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
+/* LOGOS-ADDED TEMP */
+#undef BUFFCACHE
+
+/* LOGOS-ADDED TYPE
+   Inode Information. */
+struct inode_info
+  {
+    disk_sector_t start;                /* First data sector. */
+    off_t length;                       /* File size in bytes. */
+  };
+
 /* On-disk inode.
    Must be exactly DISK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
-    disk_sector_t start;                /* First data sector. */
-    off_t length;                       /* File size in bytes. */
+    struct inode_info info;             /* Inode Information. */
     unsigned magic;                     /* Magic number. */
     uint32_t unused[125];               /* Not used. */
   };
@@ -41,11 +51,15 @@ struct inode
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
+#ifdef BUFFCACHE
+    struct inode_info data;             /* Inode content. */
+#else
     struct inode_disk data;             /* Inode content. */
+#endif
   };
 
 /* LOGOS-ADDED VARIABLE */
-struct lock inode_global_lock;            /* Lock for shared data structures and disks. */
+struct lock inode_global_lock;            /* Lock for shared data structures. */
 
 /* Returns the disk sector that contains byte offset POS within
    INODE.
@@ -55,8 +69,13 @@ static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) 
 {
   ASSERT (inode != NULL);
+#ifdef BUFFCACHE
   if (pos < inode->data.length)
-    return inode->data.start + pos / DISK_SECTOR_SIZE;
+    return inode->data.start + pos / DISK_SECTOR_SIZE;  
+#else
+  if (pos < inode->data.info.length)
+    return inode->data.info.start + pos / DISK_SECTOR_SIZE;
+#endif
   else
     return -1;
 }
@@ -95,9 +114,9 @@ inode_create (disk_sector_t sector, off_t length)
   if (disk_inode != NULL)
     {
       size_t sectors = bytes_to_sectors (length);
-      disk_inode->length = length;
+      disk_inode->info.length = length;
       disk_inode->magic = INODE_MAGIC;
-      if (free_map_allocate (sectors, &disk_inode->start))
+      if (free_map_allocate (sectors, &disk_inode->info.start))
         {
           disk_write (filesys_disk, sector, disk_inode);
           if (sectors > 0) 
@@ -106,7 +125,7 @@ inode_create (disk_sector_t sector, off_t length)
               size_t i;
               
               for (i = 0; i < sectors; i++) 
-                disk_write (filesys_disk, disk_inode->start + i, zeros); 
+                disk_write (filesys_disk, disk_inode->info.start + i, zeros); 
             }
           success = true; 
         } 
@@ -211,8 +230,13 @@ inode_close (struct inode *inode)
       if (inode->removed) 
         {
           free_map_release (inode->sector, 1);
+#ifdef BUFFCACHE
           free_map_release (inode->data.start,
                             bytes_to_sectors (inode->data.length)); 
+#else
+          free_map_release (inode->data.info.start,
+                            bytes_to_sectors (inode->data.info.length)); 
+#endif
         }
 
 	  lock_release (&inode->inode_lock);
@@ -406,7 +430,11 @@ inode_length (struct inode *inode)
   off_t ret;
 
   lock_acquire (&inode->inode_lock);
+#ifdef BUFFCACHE
   ret = inode->data.length;
+#else
+  ret = inode->data.info.length;
+#endif
   lock_release (&inode->inode_lock);
 
   return ret;
