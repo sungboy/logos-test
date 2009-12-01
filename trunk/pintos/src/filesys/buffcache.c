@@ -1,6 +1,7 @@
 #include "filesys/buffcache.h"
 #include <debug.h>
 #include <string.h>
+#include <stdio.h>
 #include <kernel/hash.h>
 #include "devices/timer.h"
 #include "threads/malloc.h"
@@ -75,6 +76,7 @@ static void buffcache_remove_entry (struct buffcache_entry *bce);
 static struct buffcache_entry *buffcache_get_new_entry_internal (struct disk *d, disk_sector_t sec_no, bool with_buffer);
 static struct buffcache_entry *buffcache_get_new_entry (struct disk *d, disk_sector_t sec_no);
 static bool buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, struct disk *d_next, disk_sector_t sec_no_next);
+void buffcache_test_start (void);
 
 /* LOGOS-ADDED FUNCTION */
 void
@@ -638,6 +640,13 @@ buffcache_write_all_dirty_blocks (bool for_power_off)
     }
 
   lock_release (&buffcache_global_lock);
+}
+
+/* LOGOS-ADDED FUNCTION */
+void
+buffcache_test_start (void)
+{
+  printf ("buffcache test start\n");
 }
 
 #endif //BUFFCACHE
