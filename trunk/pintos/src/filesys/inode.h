@@ -23,4 +23,8 @@ off_t inode_length (struct inode *);
 void inode_lock (struct inode *);
 void inode_unlock (struct inode *);
 
+#ifdef BUFFCACHE
+void inode_set_write_through (bool);
+#endif
+
 #endif /* filesys/inode.h */

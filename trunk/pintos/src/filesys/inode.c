@@ -7,6 +7,9 @@
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
+#ifdef BUFFCACHE
+#include "filesys/buffcache.h"
+#endif
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -55,9 +58,6 @@ struct inode
 #endif
   };
 
-/* LOGOS-ADDED VARIABLE */
-struct lock inode_global_lock;            /* Lock for shared data structures. */
-
 /* Returns the disk sector that contains byte offset POS within
    INODE.
    Returns -1 if INODE does not contain data for a byte at offset
@@ -81,6 +81,15 @@ byte_to_sector (const struct inode *inode, off_t pos)
    returns the same `struct inode'. */
 static struct list open_inodes;
 
+/* LOGOS-ADDED VARIABLE
+   Lock for shared data structures. */
+static struct lock inode_global_lock;
+
+#ifdef BUFFCACHE
+/* LOGOS-ADDED VARIABLE */
+static bool write_through;
+#endif
+
 /* Initializes the inode module. */
 void
 inode_init (void) 
@@ -88,6 +97,10 @@ inode_init (void)
   lock_init_as_recursive_lock (&inode_global_lock);
 
   list_init (&open_inodes);
+
+#ifdef BUFFCACHE
+  write_through = false;
+#endif
 }
 
 /* Initializes an inode with LENGTH bytes of data and
@@ -445,16 +458,25 @@ inode_length (struct inode *inode)
   return ret;
 }
 
-/* LOGOS-ADDED FUNCTION
-*/
-void inode_lock (struct inode *inode)
+/* LOGOS-ADDED FUNCTION */
+void
+inode_lock (struct inode *inode)
 {
   lock_acquire (&inode->inode_lock);
 }
 
-/* LOGOS-ADDED FUNCTION
-*/
-void inode_unlock (struct inode *inode)
+/* LOGOS-ADDED FUNCTION */
+void
+inode_unlock (struct inode *inode)
 {
   lock_release (&inode->inode_lock);
 }
+
+#ifdef BUFFCACHE
+/* LOGOS-ADDED FUNCTION */
+void
+inode_set_write_through (bool wt)
+{
+  write_through = wt;
+}
+#endif
