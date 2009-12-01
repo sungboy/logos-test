@@ -80,7 +80,7 @@ static struct buffcache_entry *buffcache_get_new_entry_internal (struct disk *d,
 static struct buffcache_entry *buffcache_get_new_entry (struct disk *d, disk_sector_t sec_no);
 static bool buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, struct disk *d_next, disk_sector_t sec_no_next);
 
-static void buffcache_test_internal (int test_count);
+static void buffcache_test_internal (int test_count, int sector_count);
 void buffcache_test_start (void);
 
 /* LOGOS-ADDED FUNCTION */
@@ -646,11 +646,11 @@ buffcache_write_all_dirty_blocks (bool for_power_off, bool all)
 
 /* LOGOS-ADDED FUNCTION */
 static void
-buffcache_test_internal (int test_count)
+buffcache_test_internal (int test_count, int sector_count)
 {
   struct file * f;
   int64_t start, end;
-  int i;
+  int i, j;
   char temp;
 
   start = timer_ticks ();
@@ -658,8 +658,11 @@ buffcache_test_internal (int test_count)
   f = filesys_open ("logos_prj5.dat");
   for (i=0; i<test_count; i++)
     {
-      file_seek (f, 0);
-      file_read (f, &temp, 1);
+      for (j=0; j<sector_count; j++)
+	    {
+          file_seek (f, j * DISK_SECTOR_SIZE);
+          file_read (f, &temp, 1);
+	    }
     }
   file_close (f);
 
@@ -672,21 +675,22 @@ buffcache_test_internal (int test_count)
 void
 buffcache_test_start (void)
 {
-  const int test_count = 500;
+  const int test_count = 1;
+  const int sector_count = 1;
 
   buffcache_write_all_dirty_blocks (false, true);
 
   printf ("test start(%d times) without buffer cache\n", test_count);
   inode_set_write_through (true);
 
-  buffcache_test_internal (test_count);
+  buffcache_test_internal (test_count, sector_count);
 
   printf ("test end\n");
 
   printf ("test start(%d times) with buffer cache\n", test_count);
   inode_set_write_through (false);
 
-  buffcache_test_internal (test_count);
+  buffcache_test_internal (test_count, sector_count);
 
   printf ("test end\n");
 }
