@@ -63,6 +63,7 @@
 
 void lru_test_start (void);
 void lru_test_middle (void);
+void buffcache_test_start (void);
 
 void
 halt (void) 
@@ -192,7 +193,14 @@ lru_test_start (void)
   syscall0 (SYS_LRU_TEST_START);
 }
 
-void lru_test_middle (void)
+void
+lru_test_middle (void)
 {
   syscall0 (SYS_LRU_TEST_MIDDLE);
+}
+
+void
+buffcache_test_start (void)
+{
+  syscall0 (SYS_BUFFCACHE_TEST_START);
 }
