@@ -1,4 +1,7 @@
 #include "filesys/buffcache.h"
+#include "filesys/inode.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
 #include <debug.h>
 #include <string.h>
 #include <stdio.h>
@@ -76,6 +79,8 @@ static void buffcache_remove_entry (struct buffcache_entry *bce);
 static struct buffcache_entry *buffcache_get_new_entry_internal (struct disk *d, disk_sector_t sec_no, bool with_buffer);
 static struct buffcache_entry *buffcache_get_new_entry (struct disk *d, disk_sector_t sec_no);
 static bool buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, struct disk *d_next, disk_sector_t sec_no_next);
+
+static void buffcache_test_internal (int test_count);
 void buffcache_test_start (void);
 
 /* LOGOS-ADDED FUNCTION */
@@ -486,10 +491,7 @@ buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, str
         }
       else
         {
-          lock_acquire (&bce->status.status_lock);
-          buffcache_set_access_stat (&bce->status);
-          lock_release (&bce->status.status_lock);
-
+          /* Sync read ahead request for a cached block. Do nothing. */
           lock_release (&buffcache_global_lock);
         }
     }
@@ -643,10 +645,50 @@ buffcache_write_all_dirty_blocks (bool for_power_off)
 }
 
 /* LOGOS-ADDED FUNCTION */
+static void
+buffcache_test_internal (int test_count)
+{
+  struct file * f;
+  int64_t start, end;
+  int i;
+  char temp;
+
+  start = timer_ticks ();
+
+  f = filesys_open ("logos_prj5.dat");
+  for (i=0; i<test_count; i++)
+    {
+      file_seek (f, 0);
+      file_read (f, &temp, 1);
+    }
+  file_close (f);
+
+  end = timer_ticks ();
+
+  printf ("Ticks : %d\n", (int)(end - start));
+}
+
+/* LOGOS-ADDED FUNCTION */
 void
 buffcache_test_start (void)
 {
-  printf ("buffcache test start\n");
+  const int test_count = 500;
+
+  buffcache_write_all_dirty_blocks (false);
+
+  printf ("test start(%d times) without buffer cache\n", test_count);
+  inode_set_write_through (true);
+
+  buffcache_test_internal (test_count);
+
+  printf ("test end\n");
+
+  printf ("test start(%d times) with buffer cache\n", test_count);
+  inode_set_write_through (false);
+
+  buffcache_test_internal (test_count);
+
+  printf ("test end\n");
 }
 
 #endif //BUFFCACHE
