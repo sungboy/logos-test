@@ -74,7 +74,7 @@ static struct buffcache_entry *buffcache_get_entry (struct disk *d, disk_sector_
 static void buffcache_remove_entry (struct buffcache_entry *bce);
 static struct buffcache_entry *buffcache_get_new_entry_internal (struct disk *d, disk_sector_t sec_no, bool with_buffer);
 static struct buffcache_entry *buffcache_get_new_entry (struct disk *d, disk_sector_t sec_no);
-static bool buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, bool fetch_next, disk_sector_t sec_no_next);
+static bool buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, struct disk *d_next, disk_sector_t sec_no_next);
 
 /* LOGOS-ADDED FUNCTION */
 void
@@ -122,7 +122,7 @@ buffcache_read_ahead_worker (void *aux UNUSED)
 
 	  ASSERT (bcraw->d != NULL);
 
-	  buffcache_read_internal (bcraw->d, bcraw->sec_no, NULL, false, 0);
+	  buffcache_read_internal (bcraw->d, bcraw->sec_no, NULL, NULL, 0);
 
       free (bcraw);
     }
@@ -436,58 +436,70 @@ buffcache_get_new_entry (struct disk *d, disk_sector_t sec_no)
 
 /* LOGOS-ADDED FUNCTION */
 static bool
-buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, bool fetch_next, disk_sector_t sec_no_next)
+buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, struct disk *d_next, disk_sector_t sec_no_next)
 {
   struct buffcache_entry *bce;
   bool is_new_bce;
 
-  ASSERT (d != NULL && buffer != NULL);
-
-  lock_acquire (&buffcache_global_lock);
-
-  if (buffcache_deny)
+  if (d != NULL)
     {
-      lock_release (&buffcache_global_lock);
-	  return false;
-    }
+      lock_acquire (&buffcache_global_lock);
 
-  /* Get the buffer cache entry related to d and sec_no. */
-  is_new_bce = false;
-  bce = buffcache_get_entry (d, sec_no);
-  if (bce == NULL)
-    {
-      is_new_bce = true;
-      bce = buffcache_get_new_entry (d, sec_no);
-      if (bce == NULL)
+      if (buffcache_deny)
         {
           lock_release (&buffcache_global_lock);
-	      return false;
+    	  return false;
+        }
+
+      /* Get the buffer cache entry related to d and sec_no. */
+      is_new_bce = false;
+      bce = buffcache_get_entry (d, sec_no);
+      if (bce == NULL)
+        {
+          is_new_bce = true;
+          bce = buffcache_get_new_entry (d, sec_no);
+          if (bce == NULL)
+            {
+              lock_release (&buffcache_global_lock);
+    	      return false;
+            }
+        }
+
+      /* Read I/O. */
+      if (is_new_bce || buffer != NULL)
+        {
+          lock_acquire (&bce->io_lock);
+
+          lock_acquire (&bce->status.status_lock);
+          buffcache_set_access_stat (&bce->status);
+          lock_release (&bce->status.status_lock);
+
+          lock_release (&buffcache_global_lock);
+
+          if (is_new_bce)
+            disk_read (d, sec_no, bce->buffer);
+
+          if (buffer != NULL)
+            memcpy (buffer, bce->buffer, DISK_SECTOR_SIZE);
+
+          lock_acquire (&bce->status.status_lock);
+          buffcache_set_access_stat (&bce->status);
+          lock_release (&bce->status.status_lock);
+
+          lock_release (&bce->io_lock);
+        }
+      else
+        {
+          lock_acquire (&bce->status.status_lock);
+          buffcache_set_access_stat (&bce->status);
+          lock_release (&bce->status.status_lock);
+
+          lock_release (&buffcache_global_lock);
         }
     }
 
-  /* Read I/O. */
-  lock_acquire (&bce->io_lock);
-
-  lock_acquire (&bce->status.status_lock);
-  buffcache_set_access_stat (&bce->status);
-  lock_release (&bce->status.status_lock);
-
-  lock_release (&buffcache_global_lock);
-
-  if (is_new_bce)
-    disk_read (d, sec_no, bce->buffer);
-
-  if (buffer != NULL)
-    memcpy (buffer, bce->buffer, DISK_SECTOR_SIZE);
-
-  lock_acquire (&bce->status.status_lock);
-  buffcache_set_access_stat (&bce->status);
-  lock_release (&bce->status.status_lock);
-
-  lock_release (&bce->io_lock);
-
   /* Read-ahead. */
-  if (fetch_next)
+  if (d_next != NULL)
     {
       struct bcra_work *bcraw;
 
@@ -496,7 +508,7 @@ buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, boo
 	  if (bcraw == NULL)
         return true;
 
-	  bcraw->d = d;
+	  bcraw->d = d_next;
       bcraw->sec_no = sec_no_next;
 
       lock_acquire (&bcra_work_lock);
@@ -511,11 +523,9 @@ buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, boo
 
 /* LOGOS-ADDED FUNCTION */
 bool
-buffcache_read (struct disk *d, disk_sector_t sec_no, void *buffer, bool fetch_next, disk_sector_t sec_no_next)
+buffcache_read (struct disk *d, disk_sector_t sec_no, void *buffer, struct disk *d_next, disk_sector_t sec_no_next)
 {
-  ASSERT (buffer != NULL);
-
-  return buffcache_read_internal (d, sec_no, buffer, fetch_next, sec_no_next);
+  return buffcache_read_internal (d, sec_no, buffer, d_next, sec_no_next);
 }
 
 /* LOGOS-ADDED FUNCTION */
@@ -617,7 +627,8 @@ buffcache_write_all_dirty_blocks (bool for_power_off)
 
       lock_acquire (&bce->io_lock);
 
-      lock_release (&buffcache_global_lock);
+      if (!for_power_off)
+        lock_release (&buffcache_global_lock);
 
       disk_write (bce->d, bce->sec_no, bce->buffer);
 
@@ -628,7 +639,8 @@ buffcache_write_all_dirty_blocks (bool for_power_off)
 
       lock_release (&bce->io_lock);
 
-	  lock_acquire (&buffcache_global_lock);
+      if (!for_power_off)
+        lock_acquire (&buffcache_global_lock);
     }
 
   lock_release (&buffcache_global_lock);
