@@ -217,19 +217,13 @@ buffcache_get_entry (struct disk *d, disk_sector_t sec_no)
 }
 
 /* LOGOS-ADDED FUNCTION
-   Before using this function, acquire buffcache_global_lock first. */
+   Before using this function, acquire buffcache_global_lock, bce->io_lock, and bce->status.status_lock first. */
 static void
 buffcache_remove_entry (struct buffcache_entry *bce)
 {
   ASSERT (bce != NULL);
 
-  lock_acquire (&bce->io_lock);
-  lock_acquire (&bce->status.status_lock);
-
   hash_delete (&buffcache, &bce->elem);
-  
-  lock_release (&bce->status.status_lock);
-  lock_release (&bce->io_lock);
 }
 
 /* LOGOS-ADDED FUNCTION
