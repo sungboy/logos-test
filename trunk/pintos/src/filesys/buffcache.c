@@ -143,7 +143,7 @@ buffcache_periodic_write_behind_worker (void *aux UNUSED)
     {
       timer_sleep (BCPWB_SLEEP_TICKS);
 
-      buffcache_write_all_dirty_blocks (false);
+      buffcache_write_all_dirty_blocks (false, false);
     }
 }
 
@@ -580,7 +580,7 @@ buffcache_write (struct disk *d, disk_sector_t sec_no, const void *buffer)
 
 /* LOGOS-ADDED FUNCTION */
 void
-buffcache_write_all_dirty_blocks (bool for_power_off)
+buffcache_write_all_dirty_blocks (bool for_power_off, bool all)
 {
   int64_t now;
   bool stop;
@@ -611,7 +611,7 @@ buffcache_write_all_dirty_blocks (bool for_power_off)
           bce = hash_entry (hash_cur (&iter), struct buffcache_entry, elem);
 
           lock_acquire (&bce->status.status_lock);
-          if (bce->status.dirty && (bce->status.dirty_write_time < now || for_power_off))
+          if (bce->status.dirty && (bce->status.dirty_write_time < now || all || for_power_off))
             {
               lock_release (&bce->status.status_lock);
               stop=false;
@@ -625,7 +625,7 @@ buffcache_write_all_dirty_blocks (bool for_power_off)
 
       lock_acquire (&bce->io_lock);
 
-      if (!for_power_off)
+      if (!for_power_off && !all)
         lock_release (&buffcache_global_lock);
 
       disk_write (bce->d, bce->sec_no, bce->buffer);
@@ -637,7 +637,7 @@ buffcache_write_all_dirty_blocks (bool for_power_off)
 
       lock_release (&bce->io_lock);
 
-      if (!for_power_off)
+      if (!for_power_off && !all)
         lock_acquire (&buffcache_global_lock);
     }
 
@@ -674,7 +674,7 @@ buffcache_test_start (void)
 {
   const int test_count = 500;
 
-  buffcache_write_all_dirty_blocks (false);
+  buffcache_write_all_dirty_blocks (false, true);
 
   printf ("test start(%d times) without buffer cache\n", test_count);
   inode_set_write_through (true);

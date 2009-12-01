@@ -43,7 +43,7 @@ filesys_done (void)
   free_map_close ();
 
 #ifdef BUFFCACHE
-  buffcache_write_all_dirty_blocks (true);
+  buffcache_write_all_dirty_blocks (true, true);
 #endif
 }
 
