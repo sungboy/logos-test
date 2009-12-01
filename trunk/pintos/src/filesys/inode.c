@@ -11,9 +11,6 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
-/* LOGOS-ADDED TEMP */
-#undef BUFFCACHE
-
 /* LOGOS-ADDED TYPE
    Inode Information. */
 struct inode_info
@@ -142,6 +139,9 @@ inode_open (disk_sector_t sector)
 {
   struct list_elem *e;
   struct inode *inode;
+#ifdef BUFFCACHE
+  struct inode_disk temp_inode_disk;
+#endif
 
   lock_acquire (&inode_global_lock);
 
@@ -173,7 +173,12 @@ inode_open (disk_sector_t sector)
   inode->deny_write_cnt = 0;
   inode->removed = false;
   lock_init_as_recursive_lock (&inode->inode_lock);
+#ifdef BUFFCACHE
+  disk_read (filesys_disk, inode->sector, &temp_inode_disk);
+  memcpy (&inode->data, &temp_inode_disk.info, sizeof (inode->data));
+#else
   disk_read (filesys_disk, inode->sector, &inode->data);
+#endif
 
   lock_release (&inode_global_lock);
   return inode;
