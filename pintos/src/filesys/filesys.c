@@ -8,6 +8,9 @@
 #include "filesys/directory.h"
 #include "devices/disk.h"
 #include "threads/synch.h"
+#ifdef BUFFCACHE
+#include "filesys/buffcache.h"
+#endif
 
 /* The disk that contains the file system. */
 struct disk *filesys_disk;
@@ -38,6 +41,10 @@ void
 filesys_done (void) 
 {
   free_map_close ();
+
+#ifdef BUFFCACHE
+  buffcache_write_all_dirty_blocks (true);
+#endif
 }
 
 /* Creates a file named NAME with the given INITIAL_SIZE.

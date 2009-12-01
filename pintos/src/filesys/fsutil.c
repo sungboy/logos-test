@@ -11,6 +11,11 @@
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 
+/* Warning : Some parts of the code of this file access the file system disk directly, 
+   so if the file system changes, you should modify this file as well. 
+   Some parts of the code of this file do not use buffer cache. 
+   Just allow it because it is not a normal code but a utility. */
+
 /* List files in the root directory. */
 void
 fsutil_ls (char **argv UNUSED) 
