@@ -1,10 +1,11 @@
-#summary Project 5: File System
+#summary File System
 
 = 진행 =
 
-동민: 전체
-
+동민: 전체<br>
 항준: 보고서 도움
 
+<br>
 
-일단 나는 코드 보면서 보고서 양식 다시 만들게!
+이제 업로드 가능하네 ^^<p>
+일단 보고서 양식에 목표만 적어서 올렸어!
