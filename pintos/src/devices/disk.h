@@ -23,4 +23,7 @@ disk_sector_t disk_size (struct disk *);
 void disk_read (struct disk *, disk_sector_t, void *);
 void disk_write (struct disk *, disk_sector_t, const void *);
 
+int64_t disk_get_total_io_count (void);
+void disk_clear_total_io_count (void);
+
 #endif /* devices/disk.h */

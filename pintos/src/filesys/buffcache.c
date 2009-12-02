@@ -66,6 +66,8 @@ static bool buffcache_deny;                       /* Buffer cache operation deny
 static struct list bcra_work_list;                /* Linked list for read-ahead works to be processed. Before using this variable, acquire bcra_work_lock first. */
 static struct lock bcra_work_lock;                /* Lock for data structures related to read-ahead works. */
 static struct semaphore bcra_worker_sem;          /* Counting semaphore to indicate that there are more read-ahead works to be processed. */
+
+static int64_t buffcache_total_hit_count;         /* For debug */
 /* LOGOS-ADDED VARIABLE END */
 
 static void buffcache_read_ahead_worker (void *aux);
@@ -80,6 +82,9 @@ static struct buffcache_entry *buffcache_get_new_entry_internal (struct disk *d,
 static struct buffcache_entry *buffcache_get_new_entry (struct disk *d, disk_sector_t sec_no);
 static bool buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, struct disk *d_next, disk_sector_t sec_no_next);
 
+static int64_t buffcache_get_total_hit_count (void);
+static void buffcache_clear_total_hit_count (void);
+
 static void buffcache_test_internal (int test_count, int sector_count, int id);
 void buffcache_test_start (int pn, int stage, int64_t* context);
 
@@ -89,6 +94,8 @@ buffcache_init (void)
 {
   bool b;
   tid_t tid;
+
+  buffcache_clear_total_hit_count ();
   
   b = hash_init_with_init_size (&buffcache, hash_hash_buffcache_entry, hash_less_buffcache_entry, NULL, BUFFCACHE_LIMIT * 2);
   ASSERT (b);
@@ -479,6 +486,8 @@ buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, str
 
           if (is_new_bce)
             disk_read (d, sec_no, bce->buffer);
+		  else
+            buffcache_total_hit_count++;
 
           if (buffer != NULL)
             memcpy (buffer, bce->buffer, DISK_SECTOR_SIZE);
@@ -566,6 +575,7 @@ buffcache_write (struct disk *d, disk_sector_t sec_no, const void *buffer)
   lock_release (&buffcache_global_lock);
 
   memcpy (bce->buffer, buffer, DISK_SECTOR_SIZE);
+  buffcache_total_hit_count++;
 
   lock_acquire (&bce->status.status_lock);
   bce->status.dirty_write_time = timer_ticks ();
@@ -645,6 +655,20 @@ buffcache_write_all_dirty_blocks (bool for_power_off, bool all)
 }
 
 /* LOGOS-ADDED FUNCTION */
+static int64_t
+buffcache_get_total_hit_count (void)
+{
+  return buffcache_total_hit_count;
+}
+
+/* LOGOS-ADDED FUNCTION */
+static void
+buffcache_clear_total_hit_count (void)
+{
+  buffcache_total_hit_count = 0;
+}
+
+/* LOGOS-ADDED FUNCTION */
 static void
 buffcache_test_internal (int test_count, int sector_count, int id)
 {
@@ -673,8 +697,8 @@ buffcache_test_internal (int test_count, int sector_count, int id)
 void
 buffcache_test_start (int pn, int stage, int64_t* context)
 {
-  const int test_count = 10;
-  const int sector_count = 5;
+  const int test_count = 50;
+  const int sector_count = 1;
 
   if (pn == 0)
     {
@@ -686,19 +710,23 @@ buffcache_test_start (int pn, int stage, int64_t* context)
           printf ("test start without buffer cache\n");
           inode_set_write_through (true);
 
-          *context = timer_ticks ();
+		  disk_clear_total_io_count ();
+          buffcache_clear_total_hit_count ();
+
           break;
         case 2:
-          printf ("Ticks : %d\n", (int)(timer_ticks () - *context));
+          printf ("Disk I/O : %d, No Hit\n", (int)disk_get_total_io_count ());
           printf ("test end\n");
 
           printf ("test start(%d times) with buffer cache\n", test_count);
           inode_set_write_through (false);
 
-          *context = timer_ticks ();
+          disk_clear_total_io_count ();
+          buffcache_clear_total_hit_count ();
+
           break;
         case 3:
-          printf ("Ticks : %d\n", (int)(timer_ticks () - *context));
+          printf ("Disk I/O : %d, Cache Hit : %d\n", (int)disk_get_total_io_count (), (int)buffcache_get_total_hit_count ());
           printf ("test end\n");
           break;
         }

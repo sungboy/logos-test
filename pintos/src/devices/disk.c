@@ -82,6 +82,10 @@ struct channel
 #define CHANNEL_CNT 2
 static struct channel channels[CHANNEL_CNT];
 
+/* LOGOS-ADDED VARIABLE */
+/* For debug */
+static int64_t disk_total_io_count;
+
 static void reset_channel (struct channel *);
 static bool check_device_type (struct disk *);
 static void identify_ata_device (struct disk *);
@@ -103,6 +107,8 @@ void
 disk_init (void) 
 {
   size_t chan_no;
+
+  disk_clear_total_io_count ();
 
   for (chan_no = 0; chan_no < CHANNEL_CNT; chan_no++)
     {
@@ -234,6 +240,8 @@ disk_read (struct disk *d, disk_sector_t sec_no, void *buffer)
   input_sector (c, buffer);
   d->read_cnt++;
   lock_release (&c->lock);
+
+  disk_total_io_count++;
 }
 
 /* Write sector SEC_NO to disk D from BUFFER, which must contain
@@ -259,6 +267,8 @@ disk_write (struct disk *d, disk_sector_t sec_no, const void *buffer)
   sema_down (&c->completion_wait);
   d->write_cnt++;
   lock_release (&c->lock);
+
+  disk_total_io_count++;
 }
 
 /* Disk detection and identification. */
@@ -568,4 +578,16 @@ interrupt_handler (struct intr_frame *f)
   NOT_REACHED ();
 }
 
+/* LOGOS-ADDED FUNCTION */
+int64_t
+disk_get_total_io_count (void)
+{
+  return disk_total_io_count;
+}
 
+/* LOGOS-ADDED FUNCTION */
+void
+disk_clear_total_io_count (void)
+{
+  disk_total_io_count = 0;
+}

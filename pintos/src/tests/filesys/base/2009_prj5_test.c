@@ -18,7 +18,7 @@ main (int argc , char *argv[])
   int64_t context = 0;
   char buffer[BUFFER_SIZE];
   int i;
-  const int test_program_count = 10;
+  const int test_program_count = 12;
   pid_t child;
 
   ASSERT (test_program_count < 100);
@@ -30,7 +30,7 @@ main (int argc , char *argv[])
       for (i=1; i<=test_program_count; i++)
 	    {
           snprintf (buffer, BUFFER_SIZE, "logos_5-%d", i);
-          CHECK (create (buffer, 512 * 5), "create %s", buffer);
+          CHECK (create (buffer, 512 * 1), "create %s", buffer);
 	    }
 
       snprintf (buffer, BUFFER_SIZE, "%s %d", argv[0], test_program_count);
