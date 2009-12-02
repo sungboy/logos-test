@@ -651,7 +651,7 @@ buffcache_test_internal (int test_count, int sector_count)
   struct file * f;
   int64_t start, end;
   int i, j;
-  char temp;
+  char temp[DISK_SECTOR_SIZE] = {0};
 
   start = timer_ticks ();
 
@@ -661,7 +661,7 @@ buffcache_test_internal (int test_count, int sector_count)
       for (j=0; j<sector_count; j++)
 	    {
           file_seek (f, j * DISK_SECTOR_SIZE);
-          file_read (f, &temp, 1);
+          file_read (f, temp, DISK_SECTOR_SIZE);
 	    }
     }
   file_close (f);
@@ -675,8 +675,10 @@ buffcache_test_internal (int test_count, int sector_count)
 void
 buffcache_test_start (void)
 {
-  const int test_count = 1;
-  const int sector_count = 1;
+  const int test_count = 10;
+  const int sector_count = 60;
+
+  thread_set_priority (PRI_MAX);
 
   buffcache_write_all_dirty_blocks (false, true);
 
