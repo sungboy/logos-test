@@ -673,7 +673,7 @@ buffcache_test_internal (int test_count, int sector_count, int id)
 void
 buffcache_test_start (int pn, int stage, int64_t* context)
 {
-  const int test_count = 1;
+  const int test_count = 10;
   const int sector_count = 5;
 
   if (pn == 0)

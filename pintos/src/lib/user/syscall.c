@@ -1,4 +1,5 @@
 #include <syscall.h>
+#include <stdint.h>
 #include "../syscall-nr.h"
 
 /* Invokes syscall NUMBER, passing no arguments, and returns the
@@ -63,7 +64,7 @@
 
 void lru_test_start (void);
 void lru_test_middle (void);
-void buffcache_test_start (void);
+void buffcache_test_start (int pn, int stage, int64_t* context);
 
 void
 halt (void) 
@@ -187,20 +188,23 @@ inumber (int fd)
   return syscall1 (SYS_INUMBER, fd);
 }
 
+/* LOGOS-ADDED FUNCTION */
 void
 lru_test_start (void)
 {
   syscall0 (SYS_LRU_TEST_START);
 }
 
+/* LOGOS-ADDED FUNCTION */
 void
 lru_test_middle (void)
 {
   syscall0 (SYS_LRU_TEST_MIDDLE);
 }
 
+/* LOGOS-ADDED FUNCTION */
 void
-buffcache_test_start (void)
+buffcache_test_start (int pn, int stage, int64_t* context)
 {
-  syscall0 (SYS_BUFFCACHE_TEST_START);
+  syscall3 (SYS_BUFFCACHE_TEST_START, pn, stage, context);
 }
