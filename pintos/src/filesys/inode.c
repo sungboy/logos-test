@@ -527,6 +527,7 @@ inode_length (struct inode *inode)
 void
 inode_lock (struct inode *inode)
 {
+  lock_acquire (&inode_global_lock);
   lock_acquire (&inode->inode_lock);
 }
 
@@ -535,6 +536,7 @@ void
 inode_unlock (struct inode *inode)
 {
   lock_release (&inode->inode_lock);
+  lock_release (&inode_global_lock);
 }
 
 #ifdef BUFFCACHE

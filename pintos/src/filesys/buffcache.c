@@ -80,8 +80,8 @@ static struct buffcache_entry *buffcache_get_new_entry_internal (struct disk *d,
 static struct buffcache_entry *buffcache_get_new_entry (struct disk *d, disk_sector_t sec_no);
 static bool buffcache_read_internal (struct disk *d, disk_sector_t sec_no, void *buffer, struct disk *d_next, disk_sector_t sec_no_next);
 
-static void buffcache_test_internal (int test_count, int sector_count);
-void buffcache_test_start (void);
+static void buffcache_test_internal (int test_count, int sector_count, int id);
+void buffcache_test_start (int pn, int stage, int64_t* context);
 
 /* LOGOS-ADDED FUNCTION */
 void
@@ -646,16 +646,18 @@ buffcache_write_all_dirty_blocks (bool for_power_off, bool all)
 
 /* LOGOS-ADDED FUNCTION */
 static void
-buffcache_test_internal (int test_count, int sector_count)
+buffcache_test_internal (int test_count, int sector_count, int id)
 {
+#define BUFFER_SIZE 256
+
   struct file * f;
-  int64_t start, end;
   int i, j;
   char temp[DISK_SECTOR_SIZE] = {0};
+  char buffer[BUFFER_SIZE];
 
-  start = thread_ticks_total ();
+  snprintf(buffer, BUFFER_SIZE, "logos_5-%d", id);
 
-  f = filesys_open ("logos_prj5.dat");
+  f = filesys_open (buffer);
   for (i=0; i<test_count; i++)
     {
       for (j=0; j<sector_count; j++)
@@ -665,36 +667,46 @@ buffcache_test_internal (int test_count, int sector_count)
 	    }
     }
   file_close (f);
-
-  end = thread_ticks_total ();
-
-  printf ("Ticks : %d\n", (int)(end - start));
 }
 
 /* LOGOS-ADDED FUNCTION */
 void
-buffcache_test_start (void)
+buffcache_test_start (int pn, int stage, int64_t* context)
 {
-  const int test_count = 10;
-  const int sector_count = 60;
+  const int test_count = 1;
+  const int sector_count = 5;
 
-  thread_set_priority (PRI_MAX);
+  if (pn == 0)
+    {
+      switch (stage)
+        {
+        case 1:
+          buffcache_write_all_dirty_blocks (false, true);
 
-  buffcache_write_all_dirty_blocks (false, true);
+          printf ("test start without buffer cache\n");
+          inode_set_write_through (true);
 
-  printf ("test start(%d times) without buffer cache\n", test_count);
-  inode_set_write_through (true);
+          *context = timer_ticks ();
+          break;
+        case 2:
+          printf ("Ticks : %d\n", (int)(timer_ticks () - *context));
+          printf ("test end\n");
 
-  buffcache_test_internal (test_count, sector_count);
+          printf ("test start(%d times) with buffer cache\n", test_count);
+          inode_set_write_through (false);
 
-  printf ("test end\n");
-
-  printf ("test start(%d times) with buffer cache\n", test_count);
-  inode_set_write_through (false);
-
-  buffcache_test_internal (test_count, sector_count);
-
-  printf ("test end\n");
+          *context = timer_ticks ();
+          break;
+        case 3:
+          printf ("Ticks : %d\n", (int)(timer_ticks () - *context));
+          printf ("test end\n");
+          break;
+        }
+    }
+  else
+    {
+      buffcache_test_internal (test_count, sector_count, pn);
+    }
 }
 
 #endif //BUFFCACHE
