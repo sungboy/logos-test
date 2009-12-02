@@ -33,7 +33,7 @@ static bool sys_isdir (struct intr_frame *f, int fd);
 static int sys_inumber (struct intr_frame *f, int fd);
 static void sys_lru_test_start (struct intr_frame *f);
 static void sys_lru_test_middle (struct intr_frame *f);
-static void sys_buffcache_test_start (struct intr_frame *f);
+static void sys_buffcache_test_start (struct intr_frame *f, int pn, int stage, int64_t* context);
 
 void
 syscall_init (void) 
@@ -81,7 +81,7 @@ syscall_handler (struct intr_frame *f)
     0, /* SYS_LRU_TEST_MIDDLE */
 
 	/* For FS Test. */
-	0, /* SYS_BUFFCACHE_TEST_START */
+	3, /* SYS_BUFFCACHE_TEST_START */
 
 	/* Add new system call here */
 
@@ -539,7 +539,7 @@ void vm_lru_test_start (void);
 void vm_lru_test_middle (void);
 #endif
 #ifdef BUFFCACHE
-void buffcache_test_start (void);
+void buffcache_test_start (int pn, int stage, int64_t* context);
 #endif
 
 /* LOGOS-ADDED FUNCTION */
@@ -563,10 +563,10 @@ static void sys_lru_test_middle (struct intr_frame *f UNUSED)
 }
 
 /* LOGOS-ADDED FUNCTION */
-static void sys_buffcache_test_start (struct intr_frame *f UNUSED)
+static void sys_buffcache_test_start (struct intr_frame *f UNUSED, int pn, int stage, int64_t* context)
 {
 #ifdef BUFFCACHE
-  buffcache_test_start ();
+  buffcache_test_start (pn, stage, context);
 #else
   ASSERT (0);
 #endif
