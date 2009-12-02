@@ -653,7 +653,7 @@ buffcache_test_internal (int test_count, int sector_count)
   int i, j;
   char temp[DISK_SECTOR_SIZE] = {0};
 
-  start = timer_ticks ();
+  start = thread_ticks_total ();
 
   f = filesys_open ("logos_prj5.dat");
   for (i=0; i<test_count; i++)
@@ -666,7 +666,7 @@ buffcache_test_internal (int test_count, int sector_count)
     }
   file_close (f);
 
-  end = timer_ticks ();
+  end = thread_ticks_total ();
 
   printf ("Ticks : %d\n", (int)(end - start));
 }
