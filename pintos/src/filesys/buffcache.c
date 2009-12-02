@@ -718,7 +718,7 @@ buffcache_test_start (int pn, int stage, int64_t* context UNUSED)
           printf ("Disk I/O : %d, No Cache Hit\n", (int)disk_get_total_io_count ());
           printf ("test end\n");
 
-          printf ("test start(%d times) with buffer cache\n", test_count);
+          printf ("test start with buffer cache\n");
           inode_set_write_through (false);
 
           disk_clear_total_io_count ();
