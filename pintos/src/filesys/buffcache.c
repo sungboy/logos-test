@@ -695,7 +695,7 @@ buffcache_test_internal (int test_count, int sector_count, int id)
 
 /* LOGOS-ADDED FUNCTION */
 void
-buffcache_test_start (int pn, int stage, int64_t* context)
+buffcache_test_start (int pn, int stage, int64_t* context UNUSED)
 {
   const int test_count = 50;
   const int sector_count = 1;
@@ -715,7 +715,7 @@ buffcache_test_start (int pn, int stage, int64_t* context)
 
           break;
         case 2:
-          printf ("Disk I/O : %d, No Hit\n", (int)disk_get_total_io_count ());
+          printf ("Disk I/O : %d, No Cache Hit\n", (int)disk_get_total_io_count ());
           printf ("test end\n");
 
           printf ("test start(%d times) with buffer cache\n", test_count);

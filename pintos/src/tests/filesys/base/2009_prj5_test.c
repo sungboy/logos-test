@@ -18,7 +18,7 @@ main (int argc , char *argv[])
   int64_t context = 0;
   char buffer[BUFFER_SIZE];
   int i;
-  const int test_program_count = 12;
+  const int test_program_count = 10;
   pid_t child;
 
   ASSERT (test_program_count < 100);
@@ -30,7 +30,8 @@ main (int argc , char *argv[])
       for (i=1; i<=test_program_count; i++)
 	    {
           snprintf (buffer, BUFFER_SIZE, "logos_5-%d", i);
-          CHECK (create (buffer, 512 * 1), "create %s", buffer);
+          if (!create (buffer, 512 * 1))
+            return 1;
 	    }
 
       snprintf (buffer, BUFFER_SIZE, "%s %d", argv[0], test_program_count);
@@ -40,7 +41,8 @@ main (int argc , char *argv[])
 	  if (child == -1)
         return 1;
 
-	  CHECK (wait (child) == 0, "wait child %d", test_program_count);
+	  if (wait (child) != 0)
+        return 1;
 
       buffcache_test_start (0, 2, &context);
 
@@ -48,14 +50,16 @@ main (int argc , char *argv[])
 	  if (child == -1)
         return 1;
 
-	  CHECK (wait (child) == 0, "wait child %d", test_program_count);
+	  if (wait (child) != 0)
+        return 1;
 
 	  buffcache_test_start (0, 3, &context);
 
       for (i=1; i<=test_program_count; i++)
 	    {
           snprintf (buffer, BUFFER_SIZE, "logos_5-%d", i);
-          CHECK (remove (buffer), "remove %s", buffer);
+          if (!remove (buffer))
+            return 1;
 	    }
     }
   else
@@ -74,9 +78,8 @@ main (int argc , char *argv[])
       buffcache_test_start (id, 1, &context);
       
       if (id > 1)
-        {
-	      CHECK (wait (child) == 0, "wait child %d", id - 1);
-        }
+	    if (wait (child) != 0)
+          return 1;
     }
 
   return 0;
