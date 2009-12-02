@@ -135,6 +135,9 @@ thread_init (void)
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 
+  /* Initialize a stat var. */
+  initial_thread->thread_ticks_total = 0;
+
 #ifdef USERPROG
 #ifdef VM
   lock_init_as_recursive_lock (&initial_thread->pagedir_lock);
@@ -238,6 +241,8 @@ thread_tick (void)
 
   ++thread_ticks;
 
+  t->thread_ticks_total++;
+
   /* Enforce preemption. */
   /* LOGOS-EDITED */
   if(is_thread_time_slice_expired())
@@ -338,6 +343,9 @@ thread_create_internal (const char *name, int priority,
   /* Stack frame for switch_threads(). */
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
+
+  /* Initialize a stat var. */
+  t->thread_ticks_total = 0;
 
 #ifdef USERPROG
   /* Initialize some variables for user process. */
@@ -683,6 +691,14 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
+
+/* LOGOS-ADDED FUNCTION */
+int64_t
+thread_ticks_total (void)
+{
+  return thread_current ()->thread_ticks_total;
+}
+
 
 /* Idle thread.  Executes when no other thread is ready to run.
 

@@ -110,6 +110,9 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    /* LOGOS-ADDED VARIABLE */
+    int64_t thread_ticks_total;
+
 #ifdef USERPROG
 	/* LOGOS-ADDED VARIABLE START */
 	/* Variables for general thread relation. */
@@ -190,5 +193,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+int64_t thread_ticks_total (void);
 
 #endif /* threads/thread.h */
